@@ -23,11 +23,11 @@ flags:
 # Requirements (normal systems)
 * A GPU
 * GPU drivers that comprehend OpenGL 4.5
-* [GLFW]()
+* [GLFW](https://www.glfw.org/)
 
 # Requirements (Windows)
-* Tons of luck
 ![](README_no1.png)  
+* Tons of luck and WSL or whatever the hell windows users have these days
 
 # Building
 ```
