@@ -627,7 +627,7 @@ int main(int argc, char **argv)
         glViewport(0, 0, frame.width, frame.height);
         glBlitNamedFramebuffer(blit_tex->framebuffer, 0, 0, 0, blit_tex->width, blit_tex->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
-        if(nframe < maxframe && outprefix[0]) {
+        if(outprefix[0] && nframe < maxframe) {
             if(batchmode)
                 snprintf(outpath, sizeof(outpath), "%sRITEG%03llu.%s.jpg", outprefix, nframe, basename(imgpath));
             glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);

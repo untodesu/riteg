@@ -1,7 +1,12 @@
 {
   "textures": {
+    "specks": {
+      "width": 160,
+      "height": 480,
+      "filter": true
+    },
     "noise": {
-      "width": 320,
+      "width": 160,
       "height": 480,
       "filter": true
     },
@@ -49,10 +54,16 @@
   "blit": "final",
   "passes": [
     {
-      "shader": "shaders/vhs_gen_noise.frag",
+      "shader": "shaders/vhs_gen_specks.frag",
       "samplers": [],
+      "output": "specks",
+      "params": [0.999, 0.3, 0.03, 6]
+    },
+    {
+      "shader": "shaders/vhs_gen_noise.frag",
+      "samplers": ["specks"],
       "output": "noise",
-      "params": [10, 3]
+      "params": []
     },
     {
       "shader": "shaders/convert_rgb_yiq.frag",
@@ -64,7 +75,7 @@
       "shader": "shaders/blend_add.frag",
       "samplers": ["yiq", "noise"],
       "output": "yiq_luma_noise",
-      "params": [1, 1]
+      "params": [1, 0.0625]
     },
     {
       "shader": "shaders/vhs_smear_yiq.frag",
@@ -100,7 +111,7 @@
       "shader": "shaders/vhs_smear_uv.frag",
       "samplers": ["pre_final"],
       "output": "final",
-      "params": [2, 16, 2]
+      "params": [2, 16, 4]
     }
   ]
 }
