@@ -1,9 +1,13 @@
 #define GLFW_INCLUDE_NONE
 #include <errno.h>
+#include <getopt.h>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+#include <libgen.h>
+#include <limits.h>
 #include <parson.h>
 #include <stb_image.h>
+#include <stb_image_write.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +23,12 @@ struct r_texture {
     unsigned int handle;
     unsigned int framebuffer;
     unsigned char *pixels; /* RGBA8888 */
+};
+
+struct r_frame {
+    int width;
+    int height;
+    unsigned char *pixels;
 };
 
 struct r_pass {
@@ -44,7 +54,8 @@ static struct r_pass *passes;
 static struct r_texture *textures;
 static struct r_texture *blit_tex;
 
-static struct r_texture image;
+static struct r_texture image = {0};
+static struct r_frame frame = {0};
 
 static unsigned int vao = 0;
 static unsigned int vert = 0;
@@ -55,7 +66,36 @@ static float curtime = 0.0f;
 static float lasttime = 0.0f;
 static float frametime = 0.0f;
 
-static void info(const char *fmt, ...)
+static size_t kstrnlen(const char *restrict s, size_t n)
+{
+    size_t i;
+    for(i = 0; *s++ && i < n; i++);
+    return i;
+}
+
+static char *kstrncat(char *restrict s1, const char *restrict s2, size_t n)
+{
+    size_t nc;
+    char *save = s1;
+    while(*s1 && n--)
+        s1++;
+    nc = kstrnlen(s2, --n);
+    s1[nc] = 0;
+    memcpy(s1, s2, nc);
+    return save;
+}
+
+static char *kstrncpy(char *restrict s1, const char *restrict s2, size_t n)
+{
+    char *save = s1;
+    while(*s2 && n--)
+        *s1++ = *s2++;
+    if(n)
+        *s1 = 0;
+    return save;
+}
+
+static void info(const char *restrict fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -64,7 +104,7 @@ static void info(const char *fmt, ...)
     va_end(ap);
 }
 
-static void panic(const char *fmt, ...)
+static void panic(const char *restrict fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -83,7 +123,7 @@ static void *malloc_safe(size_t n)
     return block;
 }
 
-static char *malloc_file(const char *filename)
+static char *malloc_file(const char *restrict filename)
 {
     char *data;
     size_t length;
@@ -160,7 +200,7 @@ static unsigned int make_program(unsigned int vert, unsigned int frag)
     return program;
 }
 
-static unsigned int make_pass_program(const char *frag_filename)
+static unsigned int make_pass_program(const char *restrict frag_filename)
 {
     char *source = malloc_file(frag_filename);
     unsigned int frag;
@@ -172,7 +212,7 @@ static unsigned int make_pass_program(const char *frag_filename)
     return make_program(vert, frag);
 }
 
-static struct r_texture *find_texture(const char *ident)
+static struct r_texture *find_texture(const char *restrict ident)
 {
     size_t i;
 
@@ -187,7 +227,7 @@ static struct r_texture *find_texture(const char *ident)
     return NULL;
 }
 
-static void parse_textures(JSON_Object *root, const char *filename)
+static void parse_textures(JSON_Object *root, const char *restrict filename)
 {
     size_t i;
     JSON_Object *node = json_object_get_object(root, "textures");
@@ -213,7 +253,11 @@ static void parse_textures(JSON_Object *root, const char *filename)
             panic("parse_textures: %s: invalid entry format", filename);
         }
 
-        strncpy(texture->ident, json_object_get_name(node, i), sizeof(texture->ident));
+        kstrncpy(texture->ident, json_object_get_name(node, i), sizeof(texture->ident));
+
+        if(!strcmp(texture->ident, "image")) {
+            panic("parse_textures: %s: `image' is a reserved name", filename);
+        }
 
         texture->width = json_object_get_number(object, "width");
         texture->height = json_object_get_number(object, "height");
@@ -246,7 +290,7 @@ static void parse_textures(JSON_Object *root, const char *filename)
     info("parse_textures: parsed %lu textures", (unsigned long)num_textures);
 }
 
-static void parse_passes(JSON_Object *root, const char *filename)
+static void parse_passes(JSON_Object *restrict root, const char *restrict filename)
 {
     size_t i, j, count;
     JSON_Array *node = json_object_get_array(root, "passes");
@@ -308,7 +352,7 @@ static void parse_passes(JSON_Object *root, const char *filename)
     info("parse_passes: parsed %lu passes", (unsigned long)num_passes);
 }
 
-static void parse_file(const char *filename)
+static void parse_file(const char *restrict filename)
 {
     JSON_Value *root = json_parse_file(filename);
     JSON_Object *root_obj;
@@ -336,7 +380,7 @@ static void parse_file(const char *filename)
     json_value_free(root);
 }
 
-static void load_image(const char *filename)
+static void load_image(const char *restrict filename)
 {
     image.pixels = stbi_load(filename, &image.width, &image.height, NULL, STBI_rgb_alpha);
 
@@ -350,7 +394,16 @@ static void load_image(const char *filename)
     glTextureSubImage2D(image.handle, 0, 0, 0, image.width, image.height, GL_RGBA, GL_UNSIGNED_BYTE, image.pixels);
 }
 
-static void render_pass(struct r_pass *pass)
+static void unload_image(void)
+{
+    if(image.pixels) {
+        stbi_image_free(image.pixels);
+        glDeleteTextures(1, &image.handle);
+        image.pixels = NULL;
+    }
+}
+
+static void render_pass(struct r_pass *restrict pass)
 {
     size_t i;
     r_uargs_t args;
@@ -380,20 +433,106 @@ static void render_pass(struct r_pass *pass)
     glDrawArrays(GL_TRIANGLES, 0, 8);
 }
 
-static void on_glfw_error(int code, const char *message)
+static void on_glfw_error(int code, const char *restrict message)
 {
     fprintf(stderr, "glfw: [%d] %s", code, message);
 }
 
+static void on_framebuffer_size(GLFWwindow *restrict window, int width, int height)
+{
+    (void)window;
+    if(frame.pixels)
+        free(frame.pixels);
+    frame.width = width;
+    frame.height = height;
+    frame.pixels = malloc_safe(4 * width * height);
+}
+
+static void usage(void)
+{
+    info("usage: riteg [-B] [-o <prefix>] [-L <count>] [-F <fps>] [-s <W>x<H>] <pipeline> [path...]");
+    info("flags:");
+    info("  -B          : Set batch mode, treat prefix as a dirname");
+    info("  -o <prefix> : Set output file prefix");
+    info("  -L <count>  : Specify maximum amount of frames to render");
+    info("  -F <fps>    : Specify the fixed framerate");
+    info("  -s <W>x<H>  : Set window size (makes it non-resizable)");
+    info("  <pipeline>  : Set the JSON pipeline");
+    info("  [path...]   : Load image/images");
+}
+
 int main(int argc, char **argv)
 {
+    int c;
     size_t i;
+    int batchmode;
+    int fixframetime;
     GLFWwindow *window;
+    const char *pipeline;
+    char outprefix[512] = {0};
+    char outpath[1024] = {0};
     int width, height;
+    int resizable = GLFW_TRUE;
+    unsigned long long nframe = 0ULL;
+    unsigned long long maxframe = 0ULL;
 
-    if(argc < 2) {
-        panic("usage: %s <json manifest> [image]", argv[0]);
+    batchmode = 0;
+    fixframetime = 0;
+
+    width = -1;
+    height = -1;
+
+    while((c = getopt(argc, argv, "Bo:L:F:s:h")) != -1) {
+        switch(c) {
+            case 'B':
+                batchmode = 1;
+                break;
+            case 'o':
+                kstrncpy(outprefix, optarg, sizeof(outprefix));
+                break;
+            case 'L':
+                maxframe = strtoull(optarg, NULL, 10);
+                break;
+            case 'F':
+                fixframetime = 1;
+                frametime = 1.0f / atof(optarg);
+                break;
+            case 's':
+                if(sscanf(optarg, "%dx%d", &width, &height) < 2)
+                    panic("argv: invalid -s argument format");
+                resizable = GLFW_FALSE;
+                break;
+            case 'h':
+                usage();
+                return 0;
+            default:
+                info("argv: unrecognized option `%c'", c);
+                usage();
+                return 1;
+        }
     }
+
+    if(!(pipeline = argv[optind])) {
+        info("argv: no pipeline defined");
+        return 1;
+    }
+
+    if(maxframe == 0ULL) {
+        maxframe = ULLONG_MAX;
+    }
+
+    if(batchmode) {
+        /* Treat it as a directory */
+        kstrncat(outprefix, "/", sizeof(outprefix));
+    }
+
+    optind++;
+
+    if(width <= 16)
+        width = 640;
+    if(height <= 16)
+        height = 480;
+    info("size: %dx%d", width, height);
 
     glfwSetErrorCallback(&on_glfw_error);
 
@@ -401,13 +540,13 @@ int main(int argc, char **argv)
         panic("glfw: init failed");
     }
 
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_RESIZABLE, resizable);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    window = glfwCreateWindow(800, 600, "riteg", NULL, NULL);
+    window = glfwCreateWindow(width, height, "riteg", NULL, NULL);
 
     if(!window) {
         panic("glfw: unable to create a window");
@@ -415,6 +554,9 @@ int main(int argc, char **argv)
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
+
+    glfwSetFramebufferSizeCallback(window, &on_framebuffer_size);
+    on_framebuffer_size(window, width, height);
 
     if(!gladLoadGL(&glfwGetProcAddress)) {
         panic("glad: unable to load function pointers");
@@ -429,26 +571,32 @@ int main(int argc, char **argv)
     glNamedBufferStorage(uargs, sizeof(r_uargs_t), NULL, GL_DYNAMIC_STORAGE_BIT);
     glNamedBufferStorage(uparams, sizeof(r_uparams_t), NULL, GL_DYNAMIC_STORAGE_BIT);
 
-    info("pipeline: %s", argv[1]);
-    parse_file(argv[1]);
+    info("pipeline: %s", pipeline);
+    parse_file(pipeline);
 
     stbi_set_flip_vertically_on_load(1);
-
-    if(argc > 2) {
-        info("image: %s", argv[2]);
-        load_image(argv[2]);
-    }
+    stbi_flip_vertically_on_write(1);
 
     curtime = glfwGetTime();
     lasttime = curtime;
-    frametime = 0.0f;
 
     while(!glfwWindowShouldClose(window)) {
-        curtime = glfwGetTime();
-        frametime = curtime - lasttime;
-        lasttime = curtime;
+        if(argv[optind]) {
+            unload_image();
+            info("reading %s", argv[optind]);
+            load_image(argv[optind]);
+            optind++;
+        }
 
-        glfwGetFramebufferSize(window, &width, &height);
+        if(fixframetime) {
+            curtime += frametime;
+            lasttime = curtime;
+        }
+        else {
+            curtime = glfwGetTime();
+            frametime = curtime - lasttime;
+            lasttime = curtime;
+        }
 
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, uargs);
         glBindBufferBase(GL_UNIFORM_BUFFER, 1, uparams);
@@ -457,17 +605,23 @@ int main(int argc, char **argv)
         for(i = 0; i < num_passes; render_pass(&passes[i++]));
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, width, height);
-        glBlitNamedFramebuffer(blit_tex->framebuffer, 0, 0, 0, blit_tex->width, blit_tex->height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glViewport(0, 0, frame.width, frame.height);
+        glBlitNamedFramebuffer(blit_tex->framebuffer, 0, 0, 0, blit_tex->width, blit_tex->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
+        if(nframe <= maxframe && outprefix[0]) {
+            snprintf(outpath, sizeof(outpath), "%s%llu.png", outprefix, nframe);
+            glReadPixels(0, 0, frame.width, frame.height, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels);
+            c = stbi_write_png(outpath, frame.width, frame.height, 4, frame.pixels, 4 * frame.width);
+            info("writing %s %s", outpath, c ? "SUCCESS" : "FAILED");
+        }
+    
         glfwSwapBuffers(window);
         glfwPollEvents();
+        
+        nframe++;
     }
 
-    if(image.pixels) {
-        stbi_image_free(image.pixels);
-        glDeleteTextures(1, &image.handle);
-    }
+    unload_image();
 
     for(i = 0; i < num_textures; ++i) {
         glDeleteFramebuffers(1, &textures[i].framebuffer);
