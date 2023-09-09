@@ -1,7 +1,7 @@
 {
   "textures": {
     "noise": {
-      "width": 640,
+      "width": 320,
       "height": 480,
       "filter": true
     },
