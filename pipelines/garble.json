@@ -1,0 +1,29 @@
+{
+  "textures": {
+    "noise_specks": {
+      "width": 486,
+      "height": 440,
+      "filter": false
+    },
+    "noise_composite": {
+      "width": 486,
+      "height": 440,
+      "filter": true
+    }
+  },
+  "blit": "noise_composite",
+  "passes": [
+    {
+      "shader": "shaders/noise_specks.frag",
+      "samplers": [],
+      "output": "noise_specks",
+      "params": [0.01]
+    },
+    {
+      "shader": "shaders/noise_composite.frag",
+      "samplers": ["image", "noise_specks"],
+      "output": "noise_composite",
+      "params": [2.0]
+    }
+  ]
+}
