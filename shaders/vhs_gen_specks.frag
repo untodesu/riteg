@@ -22,6 +22,7 @@ float rand(float x, float y)
 
 void main(void)
 {
+    /* https://www.desmos.com/calculator/dgnxfkbt4l */
     const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
     const float noise = rand(5.0 * uv.x, 5.0 * uv.y);
     const float nfx = 0.6 * rand(noise, uv.x);
