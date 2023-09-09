@@ -15,6 +15,33 @@ flags:
   [path...]   : Load image/images
 ```
 
+# Processing videos
+* Split video to frames (`ffmpeg -i <video> input/%d.png`)
+* Batch-process frames (`riteg -B -o output ... <pipeline> $(ls -v input/*.png)`)
+* Construct the video back (`ffmpeg -i output/%d.png -vcodec libx264 -crf 25 output.mp4`)
+
+# Requirements (normal systems)
+* A GPU
+* GPU drivers that comprehend OpenGL 4.5
+* [GLFW]()
+
+# Requirements (Windows)
+* Tons of luck
+![](README_no1.png)  
+
+# Building
+```
+make all
+```
+
+# Cleaning
+```
+make clean
+```
+
+# Installing
+![](README_no2.jpg)  
+
 # Examples (vhs.json)
 ![](RITEG000.black.png.jpg)  
 ![](RITEG005.fnaf_0.png.jpg)
