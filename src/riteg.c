@@ -453,7 +453,7 @@ static void usage(void)
     info("usage: riteg [-B] [-o <prefix>] [-L <count>] [-F <fps>] [-Q <qval>] [-s <W>x<H>] <pipeline> [path...]");
     info("flags:");
     info("  -B          : Set batch mode, treat prefix as a dirname");
-    info("  -o <prefix> : Set output file prefix");
+    info("  -o <prefix> : Set output file prefix (directory in batch mode)");
     info("  -L <count>  : Specify maximum amount of frames to render");
     info("  -F <fps>    : Specify the fixed framerate");
     info("  -Q <qval>   : Specify export JPEG quality (0..100)");
@@ -470,6 +470,7 @@ int main(int argc, char **argv)
     int fixframetime;
     GLFWwindow *window;
     const char *pipeline;
+    const char *pathptr;
     char outprefix[512] = {0};
     char outpath[1024] = {0};
     int width, height;
@@ -477,6 +478,7 @@ int main(int argc, char **argv)
     unsigned long jpeg_quality = 80UL;
     unsigned long long nframe = 0ULL;
     unsigned long long maxframe = 0ULL;
+    char *imgpath;
 
     batchmode = 0;
     fixframetime = 0;
@@ -525,12 +527,21 @@ int main(int argc, char **argv)
     }
 
     if(maxframe == 0ULL) {
-        maxframe = ULLONG_MAX;
+        /* Batch mode allows the application to idle
+         * and display noise for whatever the fuck seconds.
+         * To process a single image though you'd need the
+         * window to simply flash open and then close... */
+        maxframe = batchmode ? ULLONG_MAX : 1ULL;
     }
 
     if(batchmode) {
-        /* Treat it as a directory */
         kstrncat(outprefix, "/", sizeof(outprefix));
+        pathptr = outpath;
+    }
+    else {
+        /* In single-image mode the -o parameter
+         * is treated as a complete filepath */
+        pathptr = outprefix;
     }
 
     optind++;
@@ -592,6 +603,7 @@ int main(int argc, char **argv)
             unload_image();
             info("reading %s", argv[optind]);
             load_image(argv[optind]);
+            imgpath = argv[optind];
             optind++;
         }
 
@@ -615,11 +627,12 @@ int main(int argc, char **argv)
         glViewport(0, 0, frame.width, frame.height);
         glBlitNamedFramebuffer(blit_tex->framebuffer, 0, 0, 0, blit_tex->width, blit_tex->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
-        if(nframe <= maxframe && outprefix[0]) {
-            snprintf(outpath, sizeof(outpath), "%s%llu.jpg", outprefix, nframe);
+        if(nframe < maxframe && outprefix[0]) {
+            if(batchmode)
+                snprintf(outpath, sizeof(outpath), "%s%s.RITEG%04llu.jpg", outprefix, basename(imgpath), nframe);
             glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
-            c = stbi_write_jpg(outpath, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
-            info("writing %s %s", outpath, c ? "SUCCESS" : "FAILED");
+            c = stbi_write_jpg(pathptr, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
+            info("writing %s %s", pathptr, c ? "SUCCESS" : "FAILED");
         }
     
         glfwSwapBuffers(window);
