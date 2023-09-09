@@ -1,5 +1,5 @@
 # RITEG
-A realtime data-driven image processor
+A realtime-ish GLSL image processor
 
 # CLI usage:
 ```
@@ -26,7 +26,6 @@ flags:
 * [GLFW](https://www.glfw.org/)
 
 # Requirements (Windows)
-![](README_no1.png)  
 * Tons of luck and WSL or whatever the hell windows users have these days
 
 # Building
