@@ -1,0 +1,62 @@
+{
+  "textures": {
+    "yiq": {
+      "width": 320,
+      "height": 240,
+      "filter": true
+    },
+    "yiq_luma": {
+      "width": 320,
+      "height": 240,
+      "filter": true
+    },
+    "yiq_chroma": {
+      "width": 160,
+      "height": 240,
+      "filter": true
+    },
+    "yiq_combined": {
+      "width": 320,
+      "height": 240,
+      "filter": true
+    },
+    "final": {
+      "width": 320,
+      "height": 240,
+      "filter": true
+    }
+  },
+  "blit": "final",
+  "passes": [
+    {
+      "shader": "shaders/convert_rgb_yiq.frag",
+      "samplers": ["image"],
+      "output": "yiq",
+      "params": []
+    },
+    {
+      "shader": "shaders/blur_fast5.frag",
+      "samplers": ["yiq"],
+      "output": "yiq_luma",
+      "params": [1.0, 0.0]
+    },
+    {
+      "shader": "shaders/blur_fast13.frag",
+      "samplers": ["yiq"],
+      "output": "yiq_chroma",
+      "params": [1.0, 0.0]
+    },
+    {
+      "shader": "shaders/combine_yiq.frag",
+      "samplers": ["yiq_luma", "yiq_chroma"],
+      "output": "yiq_combined",
+      "params": []
+    },
+    {
+      "shader": "shaders/convert_yiq_rgb.frag",
+      "samplers": ["yiq_combined"],
+      "output": "final",
+      "params": []
+    }
+  ]
+}

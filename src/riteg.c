@@ -226,7 +226,7 @@ static void parse_textures(JSON_Object *root, const char *filename)
         texture->pixels = malloc_safe(4 * texture->width * texture->height);
 
         glCreateTextures(GL_TEXTURE_2D, 1, &texture->handle);
-        glTextureStorage2D(texture->handle, 1, GL_RGB8, texture->width, texture->height);
+        glTextureStorage2D(texture->handle, 1, GL_RGBA16F, texture->width, texture->height);
         glTextureParameteri(texture->handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(texture->handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 

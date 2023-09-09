@@ -22,14 +22,10 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float noise = rand(5.0 * uv.x, 5.0 * uv.y);
-    const float nfx = 0.6 * rand(noise, uv.x) + 0.7;
-    const float nfy = 0.6 * rand(noise, uv.y) + 0.7;
-    const float nfz = 0.6 * rand(nfx, nfy) + 0.7;
-    const float thres = 1.0 - param_a.x;
-    const float value = step(thres, noise);
-    target.x = value * nfx;
-    target.y = value * nfy;
-    target.z = value * nfz;
+    const float noise = rand(uv.x, uv.y);
+    const float value = param_a.x * step(param_a.y, noise);
+    target.x = value;
+    target.y = value;
+    target.z = value;
     target.w = value;
 }
