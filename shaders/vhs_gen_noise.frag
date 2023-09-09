@@ -22,10 +22,17 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float noise = rand(uv.x, uv.y);
-    const float value = param_a.x * step(param_a.y, noise);
-    target.x = value;
-    target.y = value;
-    target.z = value;
-    target.w = value;
+    const float pixel = 1.0 / screen.x;
+    const float steps = 4.0 + ceil(8.0 * rand(uv.y, 0.0));
+    const float thres = 1.0 - exp(-param_a.x * uv.y - param_a.y);
+
+    float accum = step(thres, rand(uv.x, uv.y));
+    for(float i = 1.0; i <= steps; ++i)
+        accum += step(thres, rand(uv.x - i * pixel, uv.y)) / i * 6.0;
+    accum /= steps;
+
+    target.x = accum;
+    target.y = accum;
+    target.z = accum;
+    target.w = accum;
 }

@@ -1,33 +1,59 @@
 {
   "textures": {
+    "noise": {
+      "width": 640,
+      "height": 480,
+      "filter": true
+    },
     "yiq": {
-      "width": 320,
-      "height": 240,
+      "width": 640,
+      "height": 480,
+      "filter": true
+    },
+    "yiq_luma_noise": {
+      "width": 640,
+      "height": 480,
+      "filter": true
+    },
+    "yiq_luma_smear": {
+      "width": 640,
+      "height": 480,
       "filter": true
     },
     "yiq_luma": {
-      "width": 320,
-      "height": 240,
+      "width": 640,
+      "height": 480,
       "filter": true
     },
     "yiq_chroma": {
-      "width": 160,
-      "height": 240,
+      "width": 320,
+      "height": 480,
       "filter": true
     },
     "yiq_combined": {
-      "width": 320,
-      "height": 240,
+      "width": 640,
+      "height": 480,
+      "filter": true
+    },
+    "pre_final": {
+      "width": 640,
+      "height": 480,
       "filter": true
     },
     "final": {
-      "width": 320,
-      "height": 240,
+      "width": 640,
+      "height": 480,
       "filter": true
     }
   },
   "blit": "final",
   "passes": [
+    {
+      "shader": "shaders/vhs_gen_noise.frag",
+      "samplers": [],
+      "output": "noise",
+      "params": [10, 3]
+    },
     {
       "shader": "shaders/convert_rgb_yiq.frag",
       "samplers": ["image"],
@@ -35,8 +61,20 @@
       "params": []
     },
     {
+      "shader": "shaders/blend_add.frag",
+      "samplers": ["yiq", "noise"],
+      "output": "yiq_luma_noise",
+      "params": [1, 1]
+    },
+    {
+      "shader": "shaders/vhs_smear_yiq.frag",
+      "samplers": ["yiq_luma_noise"],
+      "output": "yiq_luma_smear",
+      "params": [8, 1.5]
+    },
+    {
       "shader": "shaders/blur_fast5.frag",
-      "samplers": ["yiq"],
+      "samplers": ["yiq_luma_smear"],
       "output": "yiq_luma",
       "params": [1.0, 0.0]
     },
@@ -44,7 +82,7 @@
       "shader": "shaders/blur_fast13.frag",
       "samplers": ["yiq"],
       "output": "yiq_chroma",
-      "params": [1.0, 0.0]
+      "params": [1.1, 0.0]
     },
     {
       "shader": "shaders/combine_yiq.frag",
@@ -55,8 +93,14 @@
     {
       "shader": "shaders/convert_yiq_rgb.frag",
       "samplers": ["yiq_combined"],
-      "output": "final",
+      "output": "pre_final",
       "params": []
+    },
+    {
+      "shader": "shaders/vhs_smear_uv.frag",
+      "samplers": ["pre_final"],
+      "output": "final",
+      "params": [0.5, 16, 2]
     }
   ]
 }
