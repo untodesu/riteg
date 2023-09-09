@@ -19,14 +19,7 @@ flags:
 * [Existing shaders](docs/shaders/README.md)
 * [Pipeline JSON](docs/pipelines/README.md)
 
-# Demo: empty frame
-![](media/black.png)  
+# Examples (vhs.json)
 ![](docs/media/black.png.RITEG0000.jpg)  
-
-# Demo: PM5544 test pattern
-![](media/test_PM5544.png)  
 ![](docs/media/test_PM5544.png.RITEG0008.jpg)
-
-# Demo: SMPTE test pattern
-![](media/test_SMPTE.png)  
 ![](docs/media/test_SMPTE.png.RITEG0009.jpg)  
