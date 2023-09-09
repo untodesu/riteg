@@ -100,7 +100,7 @@
       "shader": "shaders/vhs_smear_uv.frag",
       "samplers": ["pre_final"],
       "output": "final",
-      "params": [0.5, 16, 2]
+      "params": [2, 16, 2]
     }
   ]
 }

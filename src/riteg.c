@@ -445,17 +445,18 @@ static void on_framebuffer_size(GLFWwindow *restrict window, int width, int heig
         free(frame.pixels);
     frame.width = width;
     frame.height = height;
-    frame.pixels = malloc_safe(4 * width * height);
+    frame.pixels = malloc_safe(3 * width * height);
 }
 
 static void usage(void)
 {
-    info("usage: riteg [-B] [-o <prefix>] [-L <count>] [-F <fps>] [-s <W>x<H>] <pipeline> [path...]");
+    info("usage: riteg [-B] [-o <prefix>] [-L <count>] [-F <fps>] [-Q <qval>] [-s <W>x<H>] <pipeline> [path...]");
     info("flags:");
     info("  -B          : Set batch mode, treat prefix as a dirname");
     info("  -o <prefix> : Set output file prefix");
     info("  -L <count>  : Specify maximum amount of frames to render");
     info("  -F <fps>    : Specify the fixed framerate");
+    info("  -Q <qval>   : Specify export JPEG quality (0..100)");
     info("  -s <W>x<H>  : Set window size (makes it non-resizable)");
     info("  <pipeline>  : Set the JSON pipeline");
     info("  [path...]   : Load image/images");
@@ -473,6 +474,7 @@ int main(int argc, char **argv)
     char outpath[1024] = {0};
     int width, height;
     int resizable = GLFW_TRUE;
+    unsigned long jpeg_quality = 80UL;
     unsigned long long nframe = 0ULL;
     unsigned long long maxframe = 0ULL;
 
@@ -482,7 +484,7 @@ int main(int argc, char **argv)
     width = -1;
     height = -1;
 
-    while((c = getopt(argc, argv, "Bo:L:F:s:h")) != -1) {
+    while((c = getopt(argc, argv, "Bo:L:F:Q:s:h")) != -1) {
         switch(c) {
             case 'B':
                 batchmode = 1;
@@ -496,6 +498,11 @@ int main(int argc, char **argv)
             case 'F':
                 fixframetime = 1;
                 frametime = 1.0f / atof(optarg);
+                break;
+            case 'Q':
+                jpeg_quality = strtoul(optarg, NULL, 10);
+                if(jpeg_quality > 100UL)
+                    jpeg_quality = 100UL;
                 break;
             case 's':
                 if(sscanf(optarg, "%dx%d", &width, &height) < 2)
@@ -609,9 +616,9 @@ int main(int argc, char **argv)
         glBlitNamedFramebuffer(blit_tex->framebuffer, 0, 0, 0, blit_tex->width, blit_tex->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
         if(nframe <= maxframe && outprefix[0]) {
-            snprintf(outpath, sizeof(outpath), "%s%llu.png", outprefix, nframe);
-            glReadPixels(0, 0, frame.width, frame.height, GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels);
-            c = stbi_write_png(outpath, frame.width, frame.height, 4, frame.pixels, 4 * frame.width);
+            snprintf(outpath, sizeof(outpath), "%s%llu.jpg", outprefix, nframe);
+            glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
+            c = stbi_write_jpg(outpath, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
             info("writing %s %s", outpath, c ? "SUCCESS" : "FAILED");
         }
     
