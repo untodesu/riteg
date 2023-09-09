@@ -15,11 +15,8 @@ flags:
   [path...]   : Load image/images
 ```
 
-# Custom pipelines
-* [Existing shaders](docs/shaders/README.md)
-* [Pipeline JSON](docs/pipelines/README.md)
-
 # Examples (vhs.json)
-![](docs/media/black.png.RITEG0000.jpg)  
-![](docs/media/test_PM5544.png.RITEG0008.jpg)
-![](docs/media/test_SMPTE.png.RITEG0009.jpg)  
+![](RITEG000.black.png.jpg)  
+![](RITEG005.fnaf_0.png.jpg)
+![](RITEG008.test_PM5544.png.jpg)  
+![](RITEG009.test_SMPTE.png.jpg)  
