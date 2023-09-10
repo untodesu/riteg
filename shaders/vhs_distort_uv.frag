@@ -26,18 +26,14 @@ void main(void)
 {
     const float pixel = 1.0 / screen.x;
     const float noise = rand(0.0, uv.y);
-    const float noise_c = param_a.x * pixel * noise;
-    const float noise_b = (1.0 + noise) / param_a.y;
 
-    if(uv.y * screen.y <= param_a.z) {
-        if(uv.x <= noise_b) {
-            target = vec4(0.0, 0.0, 0.0, 0.0);
-            return;
-        }
-
-        target = texture(image, uv - vec2(noise_b, 0.0));
-        return;
+    if(uv.y * screen.y > param_a.x) {
+        /* Small-scale UV noise without desaturation */
+        target = texture(image, uv - vec2(param_a.y * pixel * noise, 0.0));
     }
-
-    target = texture(image, uv - vec2(noise_c, 0.0));
+    else {
+        const vec4 color = texture(image, uv - vec2(param_a.z * pixel * noise, 0.0));
+        const float luma = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+        target = vec4(luma, luma, luma, color.a);
+    }
 }

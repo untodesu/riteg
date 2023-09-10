@@ -137,7 +137,6 @@ static char *malloc_file(const char *restrict filename)
     fseek(file, 0, SEEK_END);
     length = ftell(file) + 1;
     fseek(file, 0, SEEK_SET);
-    info("length=%lu", (unsigned long)length);
 
     data = malloc_safe(length);
     fread(data, 1, length, file);
@@ -489,7 +488,6 @@ int main(int argc, char **argv)
     unsigned long jpeg_quality = 80UL;
     unsigned long long nframe = 0ULL;
     unsigned long long maxframe = 0ULL;
-    char *imgpath;
 
     batchmode = 0;
     fixframetime = 0;
@@ -614,9 +612,8 @@ int main(int argc, char **argv)
     while(!glfwWindowShouldClose(window)) {
         if(argv[optind]) {
             unload_image();
-            info("reading %s", argv[optind]);
+            info("==> loading %s", argv[optind]);
             load_image(argv[optind]);
-            imgpath = argv[optind];
             optind++;
         }
 
@@ -642,10 +639,10 @@ int main(int argc, char **argv)
 
         if(outprefix[0] && nframe < maxframe) {
             if(batchmode)
-                snprintf(outpath, sizeof(outpath), "%sRITEG.%llu.%s.jpg", outprefix, nframe, (imgpath && imgpath[0]) ? basename(imgpath) : "out");
+                snprintf(outpath, sizeof(outpath), "%sRITEG-%llu.jpg", outprefix, nframe);
             glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
             c = stbi_write_jpg(pathptr, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
-            info("writing %s %s", pathptr, c ? "SUCCESS" : "FAILED");
+            info("==> saving %s %s", pathptr, c ? "\033[1;32mok\033[0m" : "\033[1;31mfail\033[0m");
         }
     
         glfwSwapBuffers(window);

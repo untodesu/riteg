@@ -52,7 +52,7 @@
       "shader": "shaders/vhs_gen_noise.frag",
       "samplers": [],
       "output": "noise",
-      "params": [ 0.9993 ]
+      "params": [ 0.9996 ]
     },
     {
       "shader": "shaders/blend_add.frag",
@@ -100,7 +100,7 @@
       "shader": "shaders/vhs_distort_uv.frag",
       "samplers": [ "rgb" ],
       "output": "final",
-      "params": [ 1, 16, 4 ]
+      "params": [ 2, 1, 32 ]
     }
   ]
 }

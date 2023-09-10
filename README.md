@@ -15,13 +15,12 @@ flags:
   [path...]   : Load image/images
 ```
 
-# Processing videos
-* Split video to frames (`ffmpeg -i <video> input/%d.png`)
-* Batch-process frames (`riteg -B -o output ... <pipeline> $(ls -v input/*.png)`)
-* Construct the video back (`ffmpeg -i output/%d.png -vcodec libx264 -crf 25 output.mp4`)
+# Documentation
+* [Here](https://github.com/untodesu/riteg/wiki)
 
 # Requirements (normal systems)
 * A GPU
+* An ISO C99 compliant C compiler
 * GPU drivers that comprehend OpenGL 4.5
 * [GLFW](https://www.glfw.org/)
 
@@ -42,11 +41,11 @@ make clean
 ![](2023-09-10_11-03.png)  
 
 # Examples (vhs.v2.json)
-![](RITEG.0.black.png.jpg)  
-![](RITEG.5.fnaf_0.png.jpg)  
-![](RITEG.6.mugshot.jpeg.jpg)  
-![](RITEG.8.test_PM5544.png.jpg)  
-![](RITEG.9.test_SMPTE.png.gif)  
+![](RITEG-5.jpg)  
+![](RITEG-6.jpg)  
+![](RITEG-7.jpg)  
+![](RITEG-8.jpg)  
+![](RITEG-9.jpg)  
 
 # Example (checker.json)
-![](RITEG.gen.checkerboard.jpg)  
+![](RITEG-checkerboard.jpg)  
