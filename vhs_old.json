@@ -96,7 +96,7 @@
       "params": [1.1, 0.0]
     },
     {
-      "shader": "shaders/combine_yiq.frag",
+      "shader": "shaders/vhs_combine_yiq.frag",
       "samplers": ["yiq_luma", "yiq_chroma"],
       "output": "yiq_combined",
       "params": []

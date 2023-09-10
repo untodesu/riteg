@@ -21,15 +21,9 @@ layout(binding = 0) uniform sampler2D image;
 
 void main(void)
 {
-    const float off1x = 1.3846153846 * param_a.x / screen.x;
-    const float off1y = 1.3846153846 * param_a.y / screen.y;
-    const float off2x = 3.2307692308 * param_a.x / screen.x;
-    const float off2y = 3.2307692308 * param_a.y / screen.y;
-    const vec2 off1 = vec2(off1x, off1y);
-    const vec2 off2 = vec2(off2x, off2y);
-
-    target = vec4(0.0, 0.0, 0.0, 0.0);
-    target += texture(image, uv) * 0.2270270270;
+    const vec2 off1 = 1.3846153846 * param_a.xy / screen.xy;
+    const vec2 off2 = 3.2307692308 * param_a.xy / screen.xy;
+    target = texture(image, uv) * 0.2270270270;
     target += texture(image, uv + off1) * 0.3162162162;
     target += texture(image, uv - off1) * 0.3162162162;
     target += texture(image, uv + off2) * 0.0702702703;

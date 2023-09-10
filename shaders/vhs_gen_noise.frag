@@ -15,8 +15,6 @@ layout(binding = 1, std140) uniform uparams {
     vec4 param_d;
 };
 
-layout(binding = 0) uniform sampler2D specks;
-
 float rand(float x, float y)
 {
     return fract(sin(dot(vec3(x, y, timing.y), vec3(12.9898, 78.233, 37.719))) * 143758.5453);
@@ -25,17 +23,16 @@ float rand(float x, float y)
 void main(void)
 {
     const float pixel = 1.0 / screen.x;
-    const float fx = rand(uv.x, uv.y);
-    const float fy = rand(fx, uv.x);
-    const float fz = rand(fx, uv.y);
-    const float steps = 4.0 + ceil(16.0 * fx);
+    const float steps = ceil(param_a.x);
 
-    target = texture(specks, uv);
+    float noise_accum = 0.0;
+    for(float i = 1.0; i <= steps; ++i)
+        noise_accum += step(param_a.y, rand(uv.x - i * pixel, uv.y)) / i * steps;
+    noise_accum += step(param_a.y, rand(uv.x, uv.y));
+    noise_accum /= steps;
 
-    for(float i = 0.1; i <= steps; ++i) {
-        target += texture(specks, uv + vec2(i * pixel, 0.0)) / i * 16.0 * fy;
-        target += texture(specks, uv - vec2(i * pixel, 0.0)) / i * 32.0 * fz;
-    }
-
-    target /= steps;
+    target.x = noise_accum;
+    target.y = noise_accum;
+    target.z = noise_accum;
+    target.w = noise_accum;
 }

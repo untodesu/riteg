@@ -629,7 +629,7 @@ int main(int argc, char **argv)
 
         if(outprefix[0] && nframe < maxframe) {
             if(batchmode)
-                snprintf(outpath, sizeof(outpath), "%sRITEG%03llu.%s.jpg", outprefix, nframe, basename(imgpath));
+                snprintf(outpath, sizeof(outpath), "%sRITEG%03llu.%s.jpg", outprefix, nframe, (imgpath && imgpath[0]) ? basename(imgpath) : "out");
             glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
             c = stbi_write_jpg(pathptr, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
             info("writing %s %s", pathptr, c ? "SUCCESS" : "FAILED");

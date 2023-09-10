@@ -16,5 +16,5 @@ layout(binding = 1) uniform sampler2D b;
 void main(void)
 {
     target = texture(a, uv) * param_a.x;
-    target += texture(b, uv) * param_a.y;
+    target *= texture(b, uv) * param_a.y;
 }
