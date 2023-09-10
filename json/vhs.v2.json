@@ -76,13 +76,13 @@
       "shader": "shaders/blur_fast5.frag",
       "samplers": [ "yiq_luma_haze" ],
       "output": "yiq_luma_blur",
-      "params": [ 1.0, 0.0 ]
+      "params": [ 0.25, 0.0 ]
     },
     {
       "shader": "shaders/blur_fast13.frag",
       "samplers": [ "yiq" ],
       "output": "yiq_chroma_blur",
-      "params": [ 1.2, 0.0 ]
+      "params": [ 1.0, 0.0 ]
     },
     {
       "shader": "shaders/vhs_combine_yiq.frag",
