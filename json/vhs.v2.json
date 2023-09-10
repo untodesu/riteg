@@ -1,106 +1,128 @@
 {
   "textures": {
-    "noise": {
+    "noise_specks": {
+      "width": 720,
+      "height": 480,
+      "filter": true
+    },
+    "noise_uniform": {
+      "width": 360,
+      "height": 240,
+      "filter": true
+    },
+    "image_yiq": {
+      "width": 720,
+      "height": 480,
+      "filter": true
+    },
+    "image_luma_haze": {
+      "width": 720,
+      "height": 480,
+      "filter": true
+    },
+    "image_luma": {
+      "width": 720,
+      "height": 480,
+      "filter": true
+    },
+    "image_chroma_noise": {
       "width": 360,
       "height": 480,
-      "filter": false
+      "filter": true
     },
-    "image_noise": {
+    "image_chroma": {
       "width": 360,
       "height": 480,
       "filter": true
     },
-    "yiq": {
+    "image_yiq_prime": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "yiq_luma_haze": {
+    "image_rgb_prime": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "yiq_luma_blur": {
+    "image_rgb_noise": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "yiq_chroma_blur": {
-      "width": 360,
-      "height": 480,
-      "filter": true
-    },
-    "yiq_combined": {
-      "width": 720,
-      "height": 480,
-      "filter": true
-    },
-    "rgb": {
-      "width": 720,
-      "height": 480,
-      "filter": true
-    },
-    "final": {
+    "image_rgb_final": {
       "width": 720,
       "height": 480,
       "filter": true
     }
   },
-  "blit": "final",
+  "blit": "image_rgb_final",
   "passes": [
     {
       "shader": "shaders/vhs_gen_noise.frag",
       "samplers": [],
-      "output": "noise",
-      "params": [ 0.99995 ]
+      "output": "noise_specks",
+      "params": [0.999995]
     },
     {
-      "shader": "shaders/blend_add.frag",
-      "samplers": [ "image", "noise" ],
-      "output": "image_noise",
-      "params": [ 1.0, 1.0 ]
+      "shader": "shaders/gen_noise.frag",
+      "samplers": [],
+      "output": "noise_uniform",
+      "params": []
     },
     {
       "shader": "shaders/convert_rgb_to_yiq.frag",
-      "samplers": [ "image_noise" ],
-      "output": "yiq",
+      "samplers": ["image"],
+      "output": "image_yiq",
       "params": []
     },
     {
       "shader": "shaders/vhs_distort_yiq.frag",
-      "samplers": [ "yiq" ],
-      "output": "yiq_luma_haze",
-      "params": [ 8, 1.5 ]
+      "samplers": ["image_yiq"],
+      "output": "image_luma_haze",
+      "params": [8, 1.5]
     },
     {
       "shader": "shaders/blur_fast5.frag",
-      "samplers": [ "yiq_luma_haze" ],
-      "output": "yiq_luma_blur",
-      "params": [ 0.25, 0.0 ]
+      "samplers": ["image_luma_haze"],
+      "output": "image_luma",
+      "params": [1.0, 0.0]
+    },
+    {
+      "shader": "shaders/blend_mul.frag",
+      "samplers": ["image_yiq", "noise_uniform"],
+      "output": "image_chroma_noise",
+      "params": [1.0, 0.25, 1.0]
     },
     {
       "shader": "shaders/blur_fast13.frag",
-      "samplers": [ "yiq" ],
-      "output": "yiq_chroma_blur",
-      "params": [ 1.0, 0.0 ]
+      "samplers": ["image_chroma_noise"],
+      "output": "image_chroma",
+      "params": [1.0, 0.0]
     },
     {
       "shader": "shaders/vhs_combine_yiq.frag",
-      "samplers": [ "yiq_luma_blur", "yiq_chroma_blur" ],
-      "output": "yiq_combined",
+      "samplers": ["image_luma", "image_chroma"],
+      "output": "image_yiq_prime",
       "params": []
     },
     {
       "shader": "shaders/convert_yiq_to_rgb.frag",
-      "samplers": [ "yiq_combined" ],
-      "output": "rgb",
+      "samplers": ["image_yiq_prime"],
+      "output": "image_rgb_noise",
       "params": []
     },
     {
+      "shader": "shaders/blend_add.frag",
+      "samplers": ["image_rgb_noise", "noise_specks"],
+      "output": "image_rgb_prime",
+      "params": [1.0, 1.0]
+    },
+    {
       "shader": "shaders/vhs_distort_uv.frag",
-      "samplers": [ "rgb" ],
-      "output": "final",
-      "params": [ 3, 1, 32 ]
+      "samplers": ["image_rgb_prime"],
+      "output": "image_rgb_final",
+      "params": [3, 0.5, 32]
     }
   ]
 }

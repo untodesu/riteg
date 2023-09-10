@@ -8,13 +8,6 @@ layout(binding = 0, std140) uniform uargs {
     vec4 timing;
 };
 
-layout(binding = 1, std140) uniform uparams {
-    vec4 param_a;
-    vec4 param_b;
-    vec4 param_c;
-    vec4 param_d;
-};
-
 uint hash(uint x)
 {
     x ^= x >> 0x010U;
@@ -36,15 +29,7 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float steps = float(16);
-    const float pixel = 1.0 / screen.x;
-
-    float noise = 0.0;
-    for(float i = 1.0; i <= steps; ++i)
-        noise += step(param_a.x, rand(uv.x - i * pixel, uv.y)) / i * 16.0;
-    noise += step(param_a.x, rand(uv.x, uv.y));
-    noise /= steps;
-
+    const float noise = rand(uv.x, uv.y);
     target.x = noise;
     target.y = noise;
     target.z = noise;
