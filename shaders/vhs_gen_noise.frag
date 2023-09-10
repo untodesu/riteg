@@ -17,18 +17,20 @@ layout(binding = 1, std140) uniform uparams {
 
 float rand(float x, float y)
 {
-    return fract(sin(dot(vec3(x, y, timing.y), vec3(12.9898, 78.233, 37.719))) * 143758.5453);
+    return fract(sin(dot(vec3(5.0 * x, 5.0 * y, timing.y), vec3(12.9898, 78.233, 37.719))) * 143758.5453);
 }
 
 void main(void)
 {
+    /* https://www.desmos.com/calculator/r2zppdcfko */
+    const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
     const float pixel = 1.0 / screen.x;
-    const float steps = ceil(param_a.x);
+    const float steps = float(16);
 
     float noise_accum = 0.0;
     for(float i = 1.0; i <= steps; ++i)
-        noise_accum += step(param_a.y, rand(uv.x - i * pixel, uv.y)) / i * steps;
-    noise_accum += step(param_a.y, rand(uv.x, uv.y));
+        noise_accum += step(thres, rand(uv.x - i * pixel, uv.y)) / i * steps / thres;
+    noise_accum += step(thres, rand(uv.x, uv.y));
     noise_accum /= steps;
 
     target.x = noise_accum;
