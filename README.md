@@ -1,5 +1,5 @@
 # RITEG
-A realtime-ish GLSL image processor
+Realtime-ish Image Transforming Enhanced with OpenGL
 
 # Documentation
 * [Building](https://github.com/untodesu/riteg/wiki/Building)
