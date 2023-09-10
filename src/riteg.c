@@ -535,10 +535,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if(maxframe == 0ULL) {
-        /* Batch mode allows the application to idle
-         * and display noise for whatever the fuck seconds */
-        maxframe = batchmode ? ULLONG_MAX : 1ULL;
+    if(batchmode) {
+        if(!maxframe) {
+            /* Export indefinitely */
+            maxframe = ULLONG_MAX;
+        }
+    }
+    else {
+        /* A single image */
+        maxframe = 1ULL;
     }
 
     if(batchmode) {
