@@ -17,7 +17,7 @@ layout(binding = 1, std140) uniform uparams {
 
 float rand(float x, float y)
 {
-    return fract(sin(dot(vec3(5.0 * x, 5.0 * y, timing.y), vec3(12.9898, 78.233, 37.719))) * 143758.5453);
+    return fract(sin(dot(vec3(x, y, mod(timing.y, 10.0)), vec3(12.9898, 78.233, 37.719))) * 143758.5453);
 }
 
 void main(void)
