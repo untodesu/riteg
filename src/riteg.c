@@ -537,9 +537,7 @@ int main(int argc, char **argv)
 
     if(maxframe == 0ULL) {
         /* Batch mode allows the application to idle
-         * and display noise for whatever the fuck seconds.
-         * To process a single image though you'd need the
-         * window to simply flash open and then close... */
+         * and display noise for whatever the fuck seconds */
         maxframe = batchmode ? ULLONG_MAX : 1ULL;
     }
 
@@ -643,12 +641,11 @@ int main(int argc, char **argv)
             glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
             c = stbi_write_jpg(pathptr, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
             info("==> saving %s %s", pathptr, c ? "\033[1;32mok\033[0m" : "\033[1;31mfail\033[0m");
+            nframe++;
         }
-    
+
         glfwSwapBuffers(window);
         glfwPollEvents();
-        
-        nframe++;
     }
 
     unload_image();
