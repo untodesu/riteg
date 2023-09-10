@@ -537,12 +537,12 @@ int main(int argc, char **argv)
 
     if(batchmode) {
         if(!maxframe) {
-            /* Export indefinitely */
+            info("setting maxframe to \033[1;36mULLONG_MAX (%llu)\033[0m", ULLONG_MAX);
             maxframe = ULLONG_MAX;
         }
     }
     else {
-        /* A single image */
+        info("setting maxframe to \033[1;34m1\033[0m");
         maxframe = 1ULL;
     }
 
