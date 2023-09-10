@@ -17,7 +17,7 @@ layout(binding = 1, std140) uniform uparams {
 
 void main(void)
 {
-    const vec2 pv = floor(screen.xy * uv / param_a.x);
+    const vec2 pv = floor(screen.xy * vec2(uv.x, 1.0 - uv.y) / param_a.x);
     const float value = 1.0 - mod(pv.x + mod(pv.y, 2.0), 2.0);
     target.x = value;
     target.y = value;

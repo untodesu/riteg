@@ -41,9 +41,12 @@ make clean
 # Installing
 ![](README_no2.jpg)  
 
-# Examples (vhs.json)
+# Examples (vhs.v2.json)
 ![](RITEG.0.black.png.jpg)  
 ![](RITEG.5.fnaf_0.png.jpg)  
 ![](RITEG.6.mugshot.jpeg.jpg)  
 ![](RITEG.8.test_PM5544.png.jpg)  
 ![](RITEG.9.test_SMPTE.png.jpg)  
+
+# Example (checker.json)
+![](RITEG.gen.checkerboard.jpg)  
