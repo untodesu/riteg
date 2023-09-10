@@ -39,7 +39,7 @@ make clean
 ```
 
 # Installing
-![](README_no2.jpg)  
+![](2023-09-10_11-03.png)  
 
 # Examples (vhs.v2.json)
 ![](RITEG.0.black.png.jpg)  
