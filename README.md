@@ -47,5 +47,8 @@ make clean
 ![](RITEG-8.jpg)  
 ![](RITEG-9.jpg)  
 
+# Video example (vhs.v2.json) (click on the image)
+[![](https://img.youtube.com/vi/X7Hk8FhaFpU/0.jpg)](https://www.youtube.com/watch?v=X7Hk8FhaFpU)
+
 # Example (checker.json)
 ![](RITEG-checkerboard.jpg)  
