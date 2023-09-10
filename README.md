@@ -17,7 +17,7 @@ Realtime-ish Image Transforming Enhanced with OpenGL
 
 # Video examples (vhs.v2.json) (click on the images)
 [![](https://img.youtube.com/vi/X7Hk8FhaFpU/0.jpg)](https://www.youtube.com/watch?v=X7Hk8FhaFpU)
-[![](https://img.youtube.com/vi/j6vQxWfi2bo/0.jpg)](https://www.youtube.com/watch?v=j6vQxWfi2bo)
+[![](https://img.youtube.com/vi/5_gs_rUYLNo/0.jpg)](https://www.youtube.com/watch?v=5_gs_rUYLNo)
 
 # Example (checker.json)
 ![](RITEG-checkerboard.jpg)  
