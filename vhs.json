@@ -70,7 +70,7 @@
       "shader": "shaders/vhs_distort_yiq.frag",
       "samplers": [ "yiq" ],
       "output": "yiq_luma_haze",
-      "params": [ 4, 1.5 ]
+      "params": [ 8, 1.5 ]
     },
     {
       "shader": "shaders/blur_fast5.frag",
@@ -82,7 +82,7 @@
       "shader": "shaders/blur_fast13.frag",
       "samplers": [ "yiq" ],
       "output": "yiq_chroma_blur",
-      "params": [ 1.0, 0.0 ]
+      "params": [ 1.2, 0.0 ]
     },
     {
       "shader": "shaders/vhs_combine_yiq.frag",

@@ -42,8 +42,8 @@ make clean
 ![](README_no2.jpg)  
 
 # Examples (vhs.json)
-![](RITEG000.black.png.jpg)  
-![](RITEG005.fnaf_0.png.jpg)  
-![](RITEG006.mugshot.jpeg.jpg)  
-![](RITEG008.test_PM5544.png.jpg)  
-![](RITEG009.test_SMPTE.png.jpg)  
+![](RITEG.0.black.png.jpg)  
+![](RITEG.5.fnaf_0.png.jpg)  
+![](RITEG.6.mugshot.jpeg.jpg)  
+![](RITEG.8.test_PM5544.png.jpg)  
+![](RITEG.9.test_SMPTE.png.jpg)  
