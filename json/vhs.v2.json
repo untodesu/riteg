@@ -1,47 +1,47 @@
 {
   "textures": {
     "noise": {
-      "width": 320,
+      "width": 360,
       "height": 480,
       "filter": false
     },
     "image_noise": {
-      "width": 320,
+      "width": 360,
       "height": 480,
       "filter": true
     },
     "yiq": {
-      "width": 640,
+      "width": 720,
       "height": 480,
       "filter": true
     },
     "yiq_luma_haze": {
-      "width": 640,
+      "width": 720,
       "height": 480,
       "filter": true
     },
     "yiq_luma_blur": {
-      "width": 640,
+      "width": 720,
       "height": 480,
       "filter": true
     },
     "yiq_chroma_blur": {
-      "width": 320,
+      "width": 360,
       "height": 480,
       "filter": true
     },
     "yiq_combined": {
-      "width": 640,
+      "width": 720,
       "height": 480,
       "filter": true
     },
     "rgb": {
-      "width": 640,
+      "width": 720,
       "height": 480,
       "filter": true
     },
     "final": {
-      "width": 640,
+      "width": 720,
       "height": 480,
       "filter": true
     }
@@ -52,7 +52,7 @@
       "shader": "shaders/vhs_gen_noise.frag",
       "samplers": [],
       "output": "noise",
-      "params": [ 0.9996 ]
+      "params": [ 0.99995 ]
     },
     {
       "shader": "shaders/blend_add.frag",
@@ -100,7 +100,7 @@
       "shader": "shaders/vhs_distort_uv.frag",
       "samplers": [ "rgb" ],
       "output": "final",
-      "params": [ 2, 1, 32 ]
+      "params": [ 3, 1, 32 ]
     }
   ]
 }
