@@ -46,7 +46,7 @@ make clean
 ![](RITEG.5.fnaf_0.png.jpg)  
 ![](RITEG.6.mugshot.jpeg.jpg)  
 ![](RITEG.8.test_PM5544.png.jpg)  
-![](RITEG.9.test_SMPTE.png.jpg)  
+![](RITEG.9.test_SMPTE.png.gif)  
 
 # Example (checker.json)
 ![](RITEG.gen.checkerboard.jpg)  

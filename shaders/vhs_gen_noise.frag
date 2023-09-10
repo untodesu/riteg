@@ -22,15 +22,13 @@ float rand(float x, float y)
 
 void main(void)
 {
-    /* https://www.desmos.com/calculator/r2zppdcfko */
-    const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
     const float pixel = 1.0 / screen.x;
     const float steps = float(16);
 
     float noise_accum = 0.0;
     for(float i = 1.0; i <= steps; ++i)
-        noise_accum += step(thres, rand(uv.x - i * pixel, uv.y)) / i * steps / thres;
-    noise_accum += step(thres, rand(uv.x, uv.y));
+        noise_accum += step(param_a.x, rand(uv.x - i * pixel, uv.y)) / i * steps / param_a.x;
+    noise_accum += step(param_a.x, rand(uv.x, uv.y));
     noise_accum /= steps;
 
     target.x = noise_accum;

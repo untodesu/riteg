@@ -448,6 +448,17 @@ static void on_framebuffer_size(GLFWwindow *restrict window, int width, int heig
     frame.pixels = malloc_safe(3 * width * height);
 }
 
+static void on_key(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+    (void)scancode;
+    (void)mods;
+
+    if(key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+        return;
+    }
+}
+
 static void usage(void)
 {
     info("usage: riteg [-B] [-o <prefix>] [-L <count>] [-F <fps>] [-Q <qval>] [-s <W>x<H>] <pipeline> [path...]");
@@ -574,6 +585,8 @@ int main(int argc, char **argv)
     glfwSwapInterval(1);
 
     glfwSetFramebufferSizeCallback(window, &on_framebuffer_size);
+    glfwSetKeyCallback(window, &on_key);
+
     on_framebuffer_size(window, width, height);
 
     if(!gladLoadGL(&glfwGetProcAddress)) {
