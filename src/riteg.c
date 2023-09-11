@@ -39,8 +39,8 @@ typedef float pass_params_t[MAX_PARAM + 8];
 enum {
     EXT_JPEG,
     EXT_PNG,
-    EXT_TGA,
     EXT_BMP,
+    EXT_COUNT
 };
 
 typedef struct {
@@ -58,6 +58,10 @@ typedef struct {
     texture_t **samplers;
     pass_params_t params;
 } pass_t;
+
+static const char *ext_names[EXT_COUNT] = {
+    "JPEG", "PNG", "BMP"
+};
 
 static const char vert_src[] = {
     0x23, 0x76, 0x65, 0x72, 0x73, 0x69,
@@ -655,6 +659,7 @@ int main(int argc, char **argv)
     unsigned long long maxframe = ULLONG_MAX;
     unsigned long long counter = 0LLU;
     const char *pipeline_path;
+    const char *ext_str;
     GLFWwindow *window;
 
     frame.width = -1;
@@ -688,6 +693,16 @@ int main(int argc, char **argv)
                 usage();
                 return 1;
         }
+    }
+
+    if((ext_str = strrchr(output_fmt, '.'))) {
+        if(!strcmp(ext_str, ".png"))
+            output_ext = EXT_PNG;
+        else if(!strcmp(ext_str, ".bmp"))
+            output_ext = EXT_BMP;
+        else
+            output_ext = EXT_JPEG;
+        info("output format: %s", ext_names[output_ext]);
     }
 
     if(!set_maxframe)
@@ -804,9 +819,6 @@ int main(int argc, char **argv)
                     break;
                 case EXT_PNG:
                     c = stbi_write_png(output_path, frame.width, frame.height, 3, frame.pixels, 3 * frame.width);
-                    break;
-                case EXT_TGA:
-                    c = stbi_write_tga(output_path, frame.width, frame.height, 3, frame.pixels);
                     break;
                 case EXT_BMP:
                     c = stbi_write_bmp(output_path, frame.width, frame.height, 3, frame.pixels);
