@@ -1,12 +1,12 @@
 {
   "textures": {
     "noise_specks": {
-      "width": 720,
+      "width": 360,
       "height": 480,
       "filter": true
     },
     "noise_uniform": {
-      "width": 360,
+      "width": 180,
       "height": 240,
       "filter": true
     },
@@ -62,7 +62,7 @@
       "shader": "shaders/vhs_gen_noise.frag",
       "samplers": [],
       "output": "noise_specks",
-      "params": [0.999995]
+      "params": [0.999995, 0.003125, 0.00, 64]
     },
     {
       "shader": "shaders/gen_noise.frag",
@@ -122,7 +122,7 @@
       "shader": "shaders/vhs_distort_uv.frag",
       "samplers": ["image_rgb_prime"],
       "output": "image_rgb_final",
-      "params": [3, 0.5, 32]
+      "params": [4, 0.5, 32]
     }
   ]
 }

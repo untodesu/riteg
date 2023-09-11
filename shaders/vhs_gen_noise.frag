@@ -36,13 +36,14 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float steps = float(16);
+    const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
+    const float steps = 4.0 + ceil(16 * rand(uv.y, uv.x));
     const float pixel = 1.0 / screen.x;
 
     float noise = 0.0;
     for(float i = 1.0; i <= steps; ++i)
-        noise += step(param_a.x, rand(uv.x - i * pixel, uv.y)) / i * 16.0;
-    noise += step(param_a.x, rand(uv.x, uv.y));
+        noise += step(thres, rand(uv.x - i * pixel, uv.y)) / i * 16.0;
+    noise += step(thres, rand(uv.x, uv.y));
     noise /= steps;
 
     target.x = noise;
