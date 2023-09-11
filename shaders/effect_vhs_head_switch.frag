@@ -42,7 +42,6 @@ void main(void)
     const float noise = rand(0.0, uv.y);
 
     if(uv.y * screen.y > param_a.x) {
-        /* Small-scale UV noise without desaturation */
         target = texture(image, uv - vec2(param_a.y * pixel * noise, 0.0));
     }
     else {

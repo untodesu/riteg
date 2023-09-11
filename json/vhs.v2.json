@@ -1,13 +1,13 @@
 {
   "textures": {
-    "noise_specks": {
-      "width": 360,
-      "height": 480,
-      "filter": true
-    },
-    "noise_uniform": {
+    "noise_chroma": {
       "width": 180,
       "height": 240,
+      "filter": true
+    },
+    "noise_head": {
+      "width": 360,
+      "height": 480,
       "filter": true
     },
     "image_yiq": {
@@ -15,114 +15,114 @@
       "height": 480,
       "filter": true
     },
-    "image_luma_haze": {
+    "luma_pre1": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "image_luma": {
+    "luma_final": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "image_chroma_noise": {
+    "chroma_pre1": {
       "width": 360,
       "height": 480,
       "filter": true
     },
-    "image_chroma": {
+    "chroma_final": {
       "width": 360,
       "height": 480,
       "filter": true
     },
-    "image_yiq_prime": {
+    "result_yiq_final": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "image_rgb_prime": {
+    "result_rgb_pre1": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "image_rgb_noise": {
+    "result_rgb_pre2": {
       "width": 720,
       "height": 480,
       "filter": true
     },
-    "image_rgb_final": {
+    "result_rgb_final": {
       "width": 720,
       "height": 480,
       "filter": true
     }
   },
-  "blit": "image_rgb_final",
+  "blit": "result_rgb_final",
   "passes": [
     {
-      "shader": "shaders/vhs_gen_noise.frag",
+      "shader": "shaders/gen_uniform_noise.frag",
       "samplers": [],
-      "output": "noise_specks",
-      "params": [0.999995, 0.003125, 0.00, 64]
-    },
-    {
-      "shader": "shaders/gen_noise.frag",
-      "samplers": [],
-      "output": "noise_uniform",
+      "output": "noise_chroma",
       "params": []
     },
     {
-      "shader": "shaders/convert_rgb_to_yiq.frag",
+      "shader": "shaders/gen_vhs_head_noise.frag",
+      "samplers": [],
+      "output": "noise_head",
+      "params": [0.999995, 0.003125, 0.00, 64]
+    },
+    {
+      "shader": "shaders/conv_rgb_to_yiq.frag",
       "samplers": ["image"],
       "output": "image_yiq",
       "params": []
     },
     {
-      "shader": "shaders/vhs_distort_yiq.frag",
+      "shader": "shaders/effect_vhs_luma_bleed.frag",
       "samplers": ["image_yiq"],
-      "output": "image_luma_haze",
+      "output": "luma_pre1",
       "params": [8, 1.5]
     },
     {
       "shader": "shaders/blur_fast5.frag",
-      "samplers": ["image_luma_haze"],
-      "output": "image_luma",
+      "samplers": ["luma_pre1"],
+      "output": "luma_final",
       "params": [1.0, 0.0]
     },
     {
-      "shader": "shaders/blend_mul.frag",
-      "samplers": ["image_yiq", "noise_uniform"],
-      "output": "image_chroma_noise",
-      "params": [1.0, 0.25, 1.0]
+      "shader": "shaders/blend_mult.frag",
+      "samplers": ["image_yiq", "noise_chroma"],
+      "output": "chroma_pre1",
+      "params": [1.0, 0.125, 1.0]
     },
     {
       "shader": "shaders/blur_fast13.frag",
-      "samplers": ["image_chroma_noise"],
-      "output": "image_chroma",
+      "samplers": ["chroma_pre1"],
+      "output": "chroma_final",
       "params": [1.0, 0.0]
     },
     {
-      "shader": "shaders/vhs_combine_yiq.frag",
-      "samplers": ["image_luma", "image_chroma"],
-      "output": "image_yiq_prime",
+      "shader": "shaders/combine_xw_yz.frag",
+      "samplers": ["luma_final", "chroma_final"],
+      "output": "result_yiq_final",
       "params": []
     },
     {
-      "shader": "shaders/convert_yiq_to_rgb.frag",
-      "samplers": ["image_yiq_prime"],
-      "output": "image_rgb_noise",
+      "shader": "shaders/conv_yiq_to_rgb.frag",
+      "samplers": ["result_yiq_final"],
+      "output": "result_rgb_pre1",
       "params": []
     },
     {
       "shader": "shaders/blend_add.frag",
-      "samplers": ["image_rgb_noise", "noise_specks"],
-      "output": "image_rgb_prime",
+      "samplers": ["result_rgb_pre1", "noise_head"],
+      "output": "result_rgb_pre2",
       "params": [1.0, 1.0]
     },
     {
-      "shader": "shaders/vhs_distort_uv.frag",
-      "samplers": ["image_rgb_prime"],
-      "output": "image_rgb_final",
-      "params": [4, 0.5, 32]
+      "shader": "shaders/effect_vhs_head_switch.frag",
+      "samplers": ["result_rgb_pre2"],
+      "output": "result_rgb_final",
+      "params": [3, 0.5, 32]
     }
   ]
 }
