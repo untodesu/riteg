@@ -1,5 +1,8 @@
 # RITEG
-Realtime-ish Image Transforming Enhanced with OpenGL
+Realtime-ish Image Transforming Enhanced with OpenGL  
+
+* [YouTube VHS effect demo](https://www.youtube.com/watch?v=AqyeJKgVvjk)  
+  [![](http://img.youtube.com/vi/AqyeJKgVvjk/maxresdefault.jpg)](https://www.youtube.com/watch?v=AqyeJKgVvjk)  
 
 # Documentation
 * [Building](https://github.com/untodesu/riteg/wiki/Building)
@@ -14,10 +17,6 @@ Realtime-ish Image Transforming Enhanced with OpenGL
 ![](RITEG-7.jpg)  
 ![](RITEG-8.jpg)  
 ![](RITEG-9.jpg)  
-
-# Video examples (vhs.v2.json) (click on the images)
-[![](https://img.youtube.com/vi/X7Hk8FhaFpU/0.jpg)](https://www.youtube.com/watch?v=X7Hk8FhaFpU)
-[![](https://img.youtube.com/vi/5_gs_rUYLNo/0.jpg)](https://www.youtube.com/watch?v=5_gs_rUYLNo)
 
 # Example (checker.json)
 ![](RITEG-checkerboard.jpg)  
