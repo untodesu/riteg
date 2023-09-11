@@ -1,90 +1,137 @@
 #define GLFW_INCLUDE_NONE
+
+#include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
-#include <glad/gl.h>
 #include <GLFW/glfw3.h>
-#include <libgen.h>
+#include <glad/gl.h>
 #include <limits.h>
 #include <parson.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef float r_uargs_t[8];
-typedef float r_uparams_t[16];
+#define unused_argument(x) ((void)(x))
 
-struct r_texture {
-    int width;
-    int height;
-    char ident[64];
-    unsigned int handle;
-    unsigned int framebuffer;
-    unsigned char *pixels; /* RGBA8888 */
+/* Each pass can handle up to 16 floating
+ * point parameters passed in form of four
+ * float 4D vectors (vec4) packed inside a
+ * uniform buffer at binding unit 1. */
+#define MAX_PARAM 16
+
+/* Reserved texture name for a built-in texture
+ * referencing previously rendered frame. */
+#define TEXNAME_FRAME "!frame"
+
+/* Reserved texture name for a built-in texture
+ * referencing the currently loaded input frame */
+#define TEXNAME_IMAGE "!image"
+
+/* 8 additional parameters are packed in form
+ * of two float 4D vectors (vec4) and contain
+ * information about resolutions and timings */
+typedef float pass_params_t[MAX_PARAM + 8];
+
+enum {
+    EXT_JPEG,
+    EXT_PNG,
+    EXT_TGA,
+    EXT_BMP,
 };
 
-struct r_frame {
+typedef struct {
     int width;
     int height;
+    char name[64];
+    unsigned int tex;
+    unsigned int fbo;
     unsigned char *pixels;
+} texture_t;
+
+typedef struct {
+    unsigned int prog;
+    texture_t *output;
+    texture_t **samplers;
+    pass_params_t params;
+} pass_t;
+
+static const char vert_src[] = {
+    0x23, 0x76, 0x65, 0x72, 0x73, 0x69,
+    0x6F, 0x6E, 0x20, 0x34, 0x35, 0x30,
+    0x20, 0x63, 0x6F, 0x72, 0x65, 0x0A,
+    0x6C, 0x61, 0x79, 0x6F, 0x75, 0x74,
+    0x28, 0x6C, 0x6F, 0x63, 0x61, 0x74,
+    0x69, 0x6F, 0x6E, 0x3D, 0x30, 0x29,
+    0x6F, 0x75, 0x74, 0x20, 0x76, 0x65,
+    0x63, 0x32, 0x20, 0x75, 0x76, 0x3B,
+    0x63, 0x6F, 0x6E, 0x73, 0x74, 0x20,
+    0x76, 0x65, 0x63, 0x32, 0x20, 0x76,
+    0x65, 0x72, 0x74, 0x73, 0x5B, 0x38,
+    0x5D, 0x3D, 0x76, 0x65, 0x63, 0x32,
+    0x5B, 0x38, 0x5D, 0x28, 0x76, 0x65,
+    0x63, 0x32, 0x28, 0x2D, 0x31, 0x2E,
+    0x30, 0x2C, 0x2D, 0x31, 0x2E, 0x30,
+    0x29, 0x2C, 0x76, 0x65, 0x63, 0x32,
+    0x28, 0x2B, 0x31, 0x2E, 0x30, 0x2C,
+    0x2D, 0x31, 0x2E, 0x30, 0x29, 0x2C,
+    0x76, 0x65, 0x63, 0x32, 0x28, 0x2B,
+    0x31, 0x2E, 0x30, 0x2C, 0x2B, 0x31,
+    0x2E, 0x30, 0x29, 0x2C, 0x76, 0x65,
+    0x63, 0x32, 0x28, 0x2D, 0x31, 0x2E,
+    0x30, 0x2C, 0x2D, 0x31, 0x2E, 0x30,
+    0x29, 0x2C, 0x76, 0x65, 0x63, 0x32,
+    0x28, 0x2B, 0x31, 0x2E, 0x30, 0x2C,
+    0x2B, 0x31, 0x2E, 0x30, 0x29, 0x2C,
+    0x76, 0x65, 0x63, 0x32, 0x28, 0x2D,
+    0x31, 0x2E, 0x30, 0x2C, 0x2B, 0x31,
+    0x2E, 0x30, 0x29, 0x2C, 0x76, 0x65,
+    0x63, 0x32, 0x28, 0x2D, 0x31, 0x2E,
+    0x30, 0x2C, 0x2D, 0x31, 0x2E, 0x30,
+    0x29, 0x2C, 0x76, 0x65, 0x63, 0x32,
+    0x28, 0x2B, 0x31, 0x2E, 0x30, 0x2C,
+    0x2B, 0x31, 0x2E, 0x30, 0x29, 0x29,
+    0x3B, 0x76, 0x6F, 0x69, 0x64, 0x20,
+    0x6D, 0x61, 0x69, 0x6E, 0x28, 0x76,
+    0x6F, 0x69, 0x64, 0x29, 0x7B, 0x75,
+    0x76, 0x3D, 0x76, 0x65, 0x63, 0x32,
+    0x28, 0x30, 0x2E, 0x35, 0x2C, 0x30,
+    0x2E, 0x35, 0x29, 0x2B, 0x30, 0x2E,
+    0x35, 0x2A, 0x76, 0x65, 0x72, 0x74,
+    0x73, 0x5B, 0x67, 0x6C, 0x5F, 0x56,
+    0x65, 0x72, 0x74, 0x65, 0x78, 0x49,
+    0x44, 0x5D, 0x3B, 0x67, 0x6C, 0x5F,
+    0x50, 0x6F, 0x73, 0x69, 0x74, 0x69,
+    0x6F, 0x6E, 0x3D, 0x76, 0x65, 0x63,
+    0x34, 0x28, 0x76, 0x65, 0x72, 0x74,
+    0x73, 0x5B, 0x67, 0x6C, 0x5F, 0x56,
+    0x65, 0x72, 0x74, 0x65, 0x78, 0x49,
+    0x44, 0x5D, 0x2C, 0x30, 0x2E, 0x30,
+    0x2C, 0x31, 0x2E, 0x30, 0x29, 0x3B,
+    0x7D, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-struct r_pass {
-    unsigned int program;
-    struct r_texture *output;
-    struct r_texture **samplers;
-    r_uparams_t params;
-};
-
-static const char *vert_source_minified =
-    "#version 450 core\n"
-    "layout(location=0)out vec2 uv;"
-    "const vec2 verts[8]=vec2[8]("
-    "vec2(-1.0,-1.0),vec2(+1.0,-1.0),vec2(+1.0,+1.0),vec2(-1.0,-1.0),"
-    "vec2(+1.0,+1.0),vec2(-1.0,+1.0),vec2(-1.0,-1.0),vec2(+1.0,+1.0));"
-    "void main(void){uv=vec2(0.5,0.5)+0.5*verts[gl_VertexID];"
-    "gl_Position=vec4(verts[gl_VertexID],0.0,1.0);}\n";
+static size_t num_textures;
+static texture_t *textures;
+static texture_t *blit;
+static texture_t frame;
+static texture_t image;
 
 static size_t num_passes;
-static size_t num_textures;
+static pass_t *passes;
 
-static struct r_pass *passes;
-static struct r_texture *textures;
-static struct r_texture *blit_tex;
+static unsigned int vert;
+static unsigned int ubo;
+static unsigned int vao;
 
-static struct r_texture image = {0};
-static struct r_frame frame = {0};
+static float curtime;
+static float lasttime;
+static float frametime;
 
-static unsigned int vao = 0;
-static unsigned int vert = 0;
-static unsigned int uargs = 0;
-static unsigned int uparams = 0;
-
-static float curtime = 0.0f;
-static float lasttime = 0.0f;
-static float frametime = 0.0f;
-
-static size_t kstrnlen(const char *restrict s, size_t n)
-{
-    size_t i;
-    for(i = 0; *s++ && i < n; i++);
-    return i;
-}
-
-static char *kstrncat(char *restrict s1, const char *restrict s2, size_t n)
-{
-    size_t nc;
-    char *save = s1;
-    while(*s1 && n--)
-        s1++;
-    nc = kstrnlen(s2, --n);
-    s1[nc] = 0;
-    memcpy(s1, s2, nc);
-    return save;
-}
-
+/* https://github.com/feltsys/felt/blob/master/lib/strings/kstrncpy.c */
 static char *kstrncpy(char *restrict s1, const char *restrict s2, size_t n)
 {
     char *save = s1;
@@ -99,38 +146,52 @@ static void info(const char *restrict fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
+    fputs("\033[1;32minfo:\033[0m ", stderr);
     vfprintf(stderr, fmt, ap);
     fputc(0x0A, stderr);
     va_end(ap);
 }
 
-static void panic(const char *restrict fmt, ...)
+static void warn(const char *restrict fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
+    fputs("\033[1;33mwarn:\033[0m ", stderr);
     vfprintf(stderr, fmt, ap);
     fputc(0x0A, stderr);
     va_end(ap);
-    abort();
 }
 
-static void *malloc_safe(size_t n)
+static void error(const char *restrict fmt, ...)
 {
-    void *block = malloc(n);
-    if(block == NULL)
-        panic("malloc: %s", strerror(errno));
-    memset(block, 0x00, n);
-    return block;
+    va_list ap;
+    va_start(ap, fmt);
+    fputs("\033[1;31merror:\033[0m ", stderr);
+    vfprintf(stderr, fmt, ap);
+    fputc(0x0A, stderr);
+    va_end(ap);
 }
 
-static char *malloc_file(const char *restrict filename)
+static void *malloc_safe(size_t size)
 {
-    char *data;
+    void *pointer;
+
+    if(!(pointer = calloc(1, size))) {
+        error("calloc: %s", strerror(errno));
+        abort();
+    }
+
+    return pointer;
+}
+
+static void *malloc_file(const char *restrict filename)
+{
+    char *buffer;
     size_t length;
-    FILE *file = fopen(filename, "rb");
+    FILE *file = fopen(filename, "r");
 
-    if(file == NULL) {
-        info("fopen: %s: %s", filename, strerror(errno));
+    if(!file) {
+        error("fopen: %s: %s", filename, strerror(errno));
         return NULL;
     }
 
@@ -138,18 +199,61 @@ static char *malloc_file(const char *restrict filename)
     length = ftell(file) + 1;
     fseek(file, 0, SEEK_SET);
 
-    data = malloc_safe(length);
-    fread(data, 1, length, file);
+    buffer = malloc_safe(length);
+    fread(buffer, length, 1, file);
     fclose(file);
 
-    return data;
+    return buffer;
+}
+
+static int make_pathfmt(char *restrict out, size_t n, const char *restrict s)
+{
+    size_t i;
+    size_t pos = 0;
+    int parsed = 0;
+
+    for(i = 0; pos < n && s[i]; ++i) {
+        if(s[i] == '%') {
+            if(pos < n)
+                out[pos++] = '%';
+            if(pos < n)
+                out[pos++] = '%';
+            continue;
+        }
+
+        if(parsed < 2) {
+            if(s[i] == '{') {
+                if(pos < n)
+                    out[pos++] = '%';
+                ++parsed;
+                continue;
+            }
+
+            if(s[i] == '}') {
+                if(pos < n)
+                    out[pos++] = 'l';
+                if(pos < n)
+                    out[pos++] = 'l';
+                if(pos < n)
+                    out[pos++] = 'u';
+                ++parsed;
+                continue;
+            }
+        }
+
+        out[pos++] = s[i];
+    }
+
+    out[n - 1] = 0x00;
+
+    return parsed >> 1;
 }
 
 static unsigned int compile_shader(unsigned int stage, const char *source)
 {
     int status;
     int length;
-    char *info_log;
+    char *buffer;
     unsigned int shader;
 
     shader = glCreateShader(stage);
@@ -160,87 +264,102 @@ static unsigned int compile_shader(unsigned int stage, const char *source)
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
 
     if(length > 1) {
-        info_log = malloc_safe(length + 1);
-        glGetShaderInfoLog(shader, length, NULL, info_log);
-        info("compile_shader: %s", info_log);
-        info("compile_shader: %s", source);
-        free(info_log);
+        buffer = malloc_safe(length);
+        glGetShaderInfoLog(shader, length, NULL, buffer);
+        info("%s", source);
+        info("%s", buffer);
+        free(buffer);
     }
 
-    if(!status)
-        panic("compile_shader: compile failed");
+    if(!status) {
+        glDeleteShader(shader);
+        error("shader compilation failed");
+        abort();
+    }
+
     return shader;
 }
 
-static unsigned int make_program(unsigned int vert, unsigned int frag)
+static unsigned int link_program(const char *frag_filename)
 {
     int status;
     int length;
-    char *info_log;
-    unsigned int program;
+    char *buffer;
+    unsigned int frag;
+    unsigned int prog;
 
-    program = glCreateProgram();
-    glAttachShader(program, vert);
-    glAttachShader(program, frag);
-    glLinkProgram(program);
-
-    glGetProgramiv(program, GL_LINK_STATUS, &status);
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
-
-    if(length > 1) {
-        info_log = malloc_safe(length + 1);
-        glGetProgramInfoLog(program, length, NULL, info_log);
-        info("make_program: %s", info_log);
-        free(info_log);
+    if(!(buffer = malloc_file(frag_filename))) {
+        error("program linking failed");
+        abort();
     }
 
-    if(!status)
-        panic("make_program: link failed");
-    return program;
+    frag = compile_shader(GL_FRAGMENT_SHADER, buffer);
+    free(buffer);
+
+    prog = glCreateProgram();
+    glAttachShader(prog, vert);
+    glAttachShader(prog, frag);
+    glLinkProgram(prog);
+
+    glDeleteShader(frag);
+
+    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &length);
+
+    if(length > 1) {
+        buffer = malloc_safe(length);
+        glGetProgramInfoLog(prog, length, NULL, buffer);
+        info("%s", buffer);
+        free(buffer);
+    }
+
+    if(!status) {
+        glDeleteProgram(prog);
+        error("program linking failed");
+        abort();
+    }
+
+    return prog;
 }
 
-static unsigned int make_pass_program(const char *restrict frag_filename)
-{
-    char *source = malloc_file(frag_filename);
-    unsigned int frag;
-
-    if(source == NULL)
-        panic("make_pass_program: %s: %s", frag_filename, strerror(errno));
-    frag = compile_shader(GL_FRAGMENT_SHADER, source);
-
-    return make_program(vert, frag);
-}
-
-static struct r_texture *find_texture(const char *restrict ident)
+static texture_t *find_texture(const char *restrict name, int reserved)
 {
     size_t i;
 
-    if(ident) {
-        for(i = 0; i < num_textures; ++i) {
-            if(strcmp(ident, textures[i].ident))
-                continue;
-            return &textures[i];
+    if(reserved) {
+        if(!strcmp(name, TEXNAME_FRAME)) {
+            return &frame;
         }
+
+        if(!strcmp(name, TEXNAME_IMAGE)) {
+            return &image;
+        }
+    }
+
+    for(i = 0; i < num_textures; ++i) {
+        if(strcmp(name, textures[i].name))
+            continue;
+        return &textures[i];
     }
 
     return NULL;
 }
 
-static void parse_textures(JSON_Object *root, const char *restrict filename)
+static void parse_textures(JSON_Object *restrict root, const char *restrict filename)
 {
     size_t i;
     JSON_Object *node = json_object_get_object(root, "textures");
     JSON_Object *object;
     JSON_Value *value;
-    struct r_texture *texture;
+    texture_t *texture;
 
-    if(node == NULL) {
-        /* Textures list should be an object */
-        panic("parse_textures: %s: invalid type", filename);
+    if(!node) {
+        error("%s: textures must be an object");
+        abort();
     }
 
     num_textures = json_object_get_count(node);
-    textures = malloc_safe(num_textures * sizeof(struct r_texture));
+    textures = malloc_safe(num_textures * sizeof(texture_t));
 
     for(i = 0; i < num_textures; ++i) {
         value = json_object_get_value_at(node, i);
@@ -248,185 +367,195 @@ static void parse_textures(JSON_Object *root, const char *restrict filename)
         texture = &textures[i];
 
         if(!object) {
-            /* Textures list is a list of objects */
-            panic("parse_textures: %s: invalid entry format", filename);
+            error("%s: textures[%zu] must be an object", i);
+            abort();
         }
 
-        kstrncpy(texture->ident, json_object_get_name(node, i), sizeof(texture->ident));
+        kstrncpy(texture->name, json_object_get_name(node, i), sizeof(texture->name));
 
-        if(!strcmp(texture->ident, "image")) {
-            panic("parse_textures: %s: `image' is a reserved name", filename);
+        if(texture->name[0] == '!') {
+            error("%s: textures[%zu]: %s is a reserved name", i, texture->name);
+            abort();
         }
 
         texture->width = json_object_get_number(object, "width");
         texture->height = json_object_get_number(object, "height");
 
-        if(texture->width == 0 || texture->height == 0) {
-            /* Textures with zero area/volume cannot exist */
-            panic("parse_textures: %s: invalid size (%s)", filename, texture->ident);
+        if(texture->width <= 0) {
+            error("%s: textures[%zu / %s]: invalid width (%d)", filename, i, texture->name, texture->width);
+            abort();
         }
 
-        texture->pixels = malloc_safe(4 * texture->width * texture->height);
+        if(texture->height <= 0) {
+            error("%s: textures[%zu / %s]: invalid height (%d)", filename, i, texture->name, texture->height);
+            abort();
+        }
 
-        glCreateTextures(GL_TEXTURE_2D, 1, &texture->handle);
-        glTextureStorage2D(texture->handle, 1, GL_RGBA16F, texture->width, texture->height);
-        glTextureParameteri(texture->handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(texture->handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glCreateTextures(GL_TEXTURE_2D, 1, &texture->tex);
+        glTextureStorage2D(texture->tex, 1, GL_RGBA16F, texture->width, texture->height);
+        glTextureParameteri(texture->tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(texture->tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         if(json_object_get_boolean(object, "filter")) {
-            glTextureParameteri(texture->handle, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTextureParameteri(texture->handle, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(texture->tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(texture->tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         }
         else {
-            glTextureParameteri(texture->handle, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTextureParameteri(texture->handle, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(texture->tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTextureParameteri(texture->tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         }
 
-        glCreateFramebuffers(1, &texture->framebuffer);
-        glNamedFramebufferTexture(texture->framebuffer, GL_COLOR_ATTACHMENT0, texture->handle, 0);
+        glCreateFramebuffers(1, &texture->fbo);
+        glNamedFramebufferTexture(texture->fbo, GL_COLOR_ATTACHMENT0, texture->tex, 0);
     }
 
-    info("parse_textures: parsed %lu textures", (unsigned long)num_textures);
+    info("parse_textures: created %zu textures", num_textures);
 }
 
-static void parse_passes(JSON_Object *restrict root, const char *restrict filename)
+static void parse_passes(JSON_Object *restrict root, const char *filename)
 {
-    size_t i, j, count;
-    JSON_Array *node = json_object_get_array(root, "passes");
-    JSON_Array *array;
-    JSON_Object *object;
-    struct r_pass *pass;
+    size_t i, j;
+    size_t count;
     const char *str;
+    JSON_Array *node = json_object_get_array(root, "passes");
+    JSON_Object *object;
+    JSON_Array *array;
+    pass_t *pass;
 
-    if(node == NULL) {
-        /* Pass list should be an array */
-        panic("parse_passes: %s: invalid type", filename);
+    if(!node) {
+        error("%s: passes field must be an array");
+        abort();
     }
 
     num_passes = json_array_get_count(node);
-    passes = malloc_safe(num_passes * sizeof(struct r_pass));
+    passes = malloc_safe(num_passes * sizeof(pass_t));
 
     for(i = 0; i < num_passes; ++i) {
         object = json_array_get_object(node, i);
         pass = &passes[i];
 
         if(!object) {
-            /* Pass list is an array of objects */
-            panic("parse_passes: %s: invalid entry format", filename);
+            error("%s: passes[%zu] must be an object", i);
+            abort();
+        }
+
+        if(!(str = json_object_get_string(object, "shader"))) {
+            error("%s: passes[%zu]: shader field must be a string", i);
+            abort();
+        }
+
+        pass->prog = link_program(str);
+
+        if((array = json_object_get_array(object, "samplers"))) {
+            count = json_array_get_count(array);
+            pass->samplers = malloc_safe((count + 1) * sizeof(texture_t *));
+
+            for(j = 0; j < count; ++j) {
+                if(!(str = json_array_get_string(array, j))) {
+                    error("%s: passes[%zu]: samplers[%zu]: value must be a string", filename, i, j);
+                    abort();
+                }
+
+                if(!(pass->samplers[j] = find_texture(str, 1))) {
+                    error("%s: passes[%zu]: samplers[%zu]: %s is not a valid texture", filename, i, j, str);
+                    abort();
+                }
+            }
+
+            pass->samplers[count] = NULL;
+        }
+
+        if(!(str = json_object_get_string(object, "output"))) {
+            error("%s: passes[%zu]: output field must be a string", filename, i);
+            abort();
+        }
+
+        if(!(pass->output = find_texture(str, 0))) {
+            error("%s: passes[%zu]: %s is either an invalid or a reserved texture", filename, i, str);
+            abort();
         }
 
         if((array = json_object_get_array(object, "params"))) {
             count = json_array_get_count(array);
-            if(count > 16)
-                count = 16;
+
+            if(count > MAX_PARAM) {
+                warn("%s: passes[%zu]: too much params (%zu/%zu)", filename, i, count, MAX_PARAM);
+                count = MAX_PARAM;
+            }
+
             for(j = 0; j < count; ++j) {
                 pass->params[j] = json_array_get_number(array, j);
             }
         }
+    }
 
-        if((array = json_object_get_array(object, "samplers"))) {
-            count = json_array_get_count(array);
-            pass->samplers = malloc_safe((count + 1) * sizeof(struct r_texture *));
-            for(j = 0; j < count; ++j) {
-                str = json_array_get_string(array, j);
-                if(!strcmp(str, "image")) {
-                    pass->samplers[j] = &image;
-                    continue;
-                }
-                else {
-                    if(!(pass->samplers[j] = find_texture(str))) {
-                        /* We cannot bind NULL to the sampler! */
-                        panic("parse_passes: %s: %s: invalid texture", filename, str);
-                    }
-                }
-            }
+    info("parse_passes: created %zu passes", num_passes);
+}
+
+static void parse_file(const char *filename)
+{
+    JSON_Value *json = json_parse_file(filename);
+    JSON_Object *root;
+    JSON_Value *vblit;
+    const char *str;
+
+    if(!json) {
+        error("%s: syntax error", filename);
+        abort();
+    }
+
+    if(!(root = json_value_get_object(json))) {
+        error("%s: root must be an object", filename);
+        abort();
+    }
+
+    parse_textures(root, filename);
+    parse_passes(root, filename);
+
+    if(!(vblit = json_object_get_value(root, "blit"))) {
+        blit = &textures[num_textures - 1];
+        warn("%s: defaulting blit to %s", filename, blit->name);
+        warn("%s: expect unpredictable results!", filename);
+    }
+    else {
+        if(!(str = json_value_get_string(vblit))) {
+            error("%s: blit field must be a string", filename);
+            abort();
         }
 
-        str = json_object_get_string(object, "output");
-        if(!(pass->output = find_texture(str)))
-            panic("parse_passes: %s: %s: invalid texture", filename, str);
-        pass->program = make_pass_program(json_object_get_string(object, "shader"));
+        if(!(blit = find_texture(str, 0))) {
+            error("%s: blit: %s is either an invalid or a reserved texture", filename, str);
+            abort();
+        }
+
+        info("%s: setting blit to %s", filename, blit->name);
     }
 
-    info("parse_passes: parsed %lu passes", (unsigned long)num_passes);
+    json_value_free(json);
 }
 
-static void parse_file(const char *restrict filename)
-{
-    JSON_Value *root = json_parse_file(filename);
-    JSON_Object *root_obj;
-    JSON_Value *blit_val;
-
-    if(root == NULL) {
-        panic("parse_file: %s: parse failed", filename);
-    }
-
-    if(!(root_obj = json_value_get_object(root))) {
-        panic("parse_file: %s: root should be an object", filename);
-    }
-
-    parse_textures(root_obj, filename);
-    parse_passes(root_obj, filename);
-
-    if(!(blit_val = json_object_get_value(root_obj, "blit"))) {
-        panic("parse_file: %s: blit: no blit texture", filename);
-    }
-
-    if(!(blit_tex = find_texture(json_value_get_string(blit_val)))) {
-        panic("parse_file: %s: blit: invalid texture", filename);
-    }
-
-    json_value_free(root);
-}
-
-static void load_image(const char *restrict filename)
-{
-    image.pixels = stbi_load(filename, &image.width, &image.height, NULL, STBI_rgb_alpha);
-
-    if(!image.pixels) {
-        info("image: %s: load failed", filename);
-        return;
-    }
-
-    glCreateTextures(GL_TEXTURE_2D, 1, &image.handle);
-    glTextureStorage2D(image.handle, 1, GL_RGBA8, image.width, image.height);
-    glTextureSubImage2D(image.handle, 0, 0, 0, image.width, image.height, GL_RGBA, GL_UNSIGNED_BYTE, image.pixels);
-}
-
-static void unload_image(void)
-{
-    if(image.pixels) {
-        stbi_image_free(image.pixels);
-        glDeleteTextures(1, &image.handle);
-        image.pixels = NULL;
-    }
-}
-
-static void render_pass(struct r_pass *restrict pass)
+static void draw_pass(pass_t *restrict pass)
 {
     size_t i;
-    r_uargs_t args;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, pass->output->handle);
+    glBindFramebuffer(GL_FRAMEBUFFER, pass->output->fbo);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    args[0] = pass->output->width;
-    args[1] = pass->output->height;
-    args[2] = image.width;
-    args[3] = image.height;
+    pass->params[MAX_PARAM + 0] = pass->output->width;
+    pass->params[MAX_PARAM + 1] = pass->output->height;
+    pass->params[MAX_PARAM + 2] = frame.width;
+    pass->params[MAX_PARAM + 3] = frame.height;
+    pass->params[MAX_PARAM + 4] = frametime;
+    pass->params[MAX_PARAM + 5] = curtime;
+    pass->params[MAX_PARAM + 6] = 0.0f;
+    pass->params[MAX_PARAM + 7] = 0.0f;
 
-    args[4] = frametime;
-    args[5] = curtime;
-    args[6] = 0.0f;
-    args[7] = 0.0f;
-
-    glNamedBufferSubData(uargs, 0, sizeof(r_uargs_t), args);
-    glNamedBufferSubData(uparams, 0, sizeof(r_uparams_t), pass->params);
+    glNamedBufferSubData(ubo, 0, sizeof(pass_params_t), pass->params);
 
     for(i = 0; pass->samplers[i]; ++i)
-        glBindTextureUnit(i, pass->samplers[i]->handle);
-    glUseProgram(pass->program);
+        glBindTextureUnit(i, pass->samplers[i]->tex);
+    glUseProgram(pass->prog);
 
     glViewport(0, 0, pass->output->width, pass->output->height);
     glDrawArrays(GL_TRIANGLES, 0, 8);
@@ -434,140 +563,164 @@ static void render_pass(struct r_pass *restrict pass)
 
 static void on_glfw_error(int code, const char *restrict message)
 {
-    fprintf(stderr, "glfw: [%d] %s", code, message);
+    error("glfw: error[%d]: %s", code, message);
 }
 
-static void on_framebuffer_size(GLFWwindow *restrict window, int width, int height)
+static void on_framebuffer_size(GLFWwindow *window, int width, int height)
 {
-    (void)window;
-    if(frame.pixels)
-        free(frame.pixels);
+    unused_argument(window);
+
+    if(frame.tex) {
+        glDeleteTextures(1, &frame.tex);
+        glDeleteFramebuffers(1, &frame.fbo);
+    }
+
+    free(frame.pixels);
+
     frame.width = width;
     frame.height = height;
     frame.pixels = malloc_safe(3 * width * height);
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &frame.tex);
+    glTextureStorage2D(frame.tex, 1, GL_RGBA16F, frame.width, frame.height);
+    glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(frame.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(frame.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glCreateFramebuffers(1, &frame.fbo);
+    glNamedFramebufferTexture(frame.fbo, GL_COLOR_ATTACHMENT0, frame.tex, 0);
 }
 
 static void on_key(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-    (void)scancode;
-    (void)mods;
+    unused_argument(scancode);
+    unused_argument(mods);
 
-    if(key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) {
+    if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
         return;
     }
 }
 
+static void load_image(const char *filename)
+{
+    image.pixels = stbi_load(filename, &image.width, &image.height, NULL, STBI_rgb_alpha);
+
+    if(!image.pixels) {
+        error("%s: load failed", filename);
+        return;
+    }
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &image.tex);
+    glTextureStorage2D(image.tex, 1, GL_RGBA16F, image.width, image.height);
+    glTextureSubImage2D(image.tex, 0, 0, 0, image.width, image.height, GL_RGBA, GL_UNSIGNED_BYTE, image.pixels);
+    glTextureParameteri(image.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(image.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(image.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(image.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+}
+
+static void unload_image(void)
+{
+    if(image.pixels) {
+        stbi_image_free(image.pixels);
+        glDeleteTextures(1, &image.tex);
+        image.pixels = NULL;
+        image.tex = 0;
+    }
+}
+
 static void usage(void)
 {
-    info("usage: riteg [-B] [-o <prefix>] [-L <count>] [-F <fps>] [-Q <qval>] [-s <W>x<H>] <pipeline> [path...]");
-    info("flags:");
-    info("  -B          : Set batch mode, treat prefix as a dirname");
-    info("  -o <prefix> : Set output file prefix (directory in batch mode)");
-    info("  -L <count>  : Specify maximum amount of frames to render");
-    info("  -F <fps>    : Specify the fixed framerate");
-    info("  -Q <qval>   : Specify export JPEG quality (0..100)");
-    info("  -s <W>x<H>  : Set window size (makes it non-resizable)");
-    info("  <pipeline>  : Set the JSON pipeline");
-    info("  [path...]   : Load image/images");
+    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] <pipeline> [paths...]\n");
+    fprintf(stderr, "options:\n");
+    fprintf(stderr, "   -h          : print this message and exit\n");
+    fprintf(stderr, "   -o <path>   : specify output path. {} is substituted to frame index.\n");
+    fprintf(stderr, "   -s <w>:<h>  : specify window size (makes the window non-resizable).\n");
+    fprintf(stderr, "   -f <fps>    : specify fixed framerate (frametime = 1 / FPS).\n");
+    fprintf(stderr, "   -c <count>  : specify maximum amount of frames to export.\n");
 }
 
 int main(int argc, char **argv)
 {
     int c;
     size_t i;
-    int batchmode;
-    int fixframetime;
-    GLFWwindow *window;
-    const char *pipeline;
-    const char *pathptr;
-    char outprefix[512] = {0};
-    char outpath[1024] = {0};
-    int width, height;
+    int batch, fixed;
+    int set_maxframe = 0;
     int resizable = GLFW_TRUE;
-    unsigned long jpeg_quality = 80UL;
-    unsigned long long nframe = 0ULL;
-    unsigned long long maxframe = 0ULL;
+    int output_ext = EXT_JPEG;
+    char output_fmt[FILENAME_MAX] = {0};
+    char output_path[FILENAME_MAX] = {0};
+    unsigned long long maxframe = ULLONG_MAX;
+    unsigned long long counter = 0LLU;
+    const char *pipeline_path;
+    GLFWwindow *window;
 
-    batchmode = 0;
-    fixframetime = 0;
+    frame.width = -1;
+    frame.height = -1;
 
-    width = -1;
-    height = -1;
+    batch = 0;
+    fixed = 0;
 
-    while((c = getopt(argc, argv, "Bo:L:F:Q:s:h")) != -1) {
+    while((c = getopt(argc, argv, "ho:s:f:c:")) != -1) {
         switch(c) {
-            case 'B':
-                batchmode = 1;
-                break;
-            case 'o':
-                kstrncpy(outprefix, optarg, sizeof(outprefix));
-                break;
-            case 'L':
-                maxframe = strtoull(optarg, NULL, 10);
-                break;
-            case 'F':
-                fixframetime = 1;
-                frametime = 1.0f / atof(optarg);
-                break;
-            case 'Q':
-                jpeg_quality = strtoul(optarg, NULL, 10);
-                if(jpeg_quality > 100UL)
-                    jpeg_quality = 100UL;
-                break;
-            case 's':
-                if(sscanf(optarg, "%dx%d", &width, &height) < 2)
-                    panic("argv: invalid -s argument format");
-                resizable = GLFW_FALSE;
-                break;
             case 'h':
                 usage();
                 return 0;
+            case 'o':
+                batch = make_pathfmt(output_fmt, sizeof(output_fmt), optarg);
+                break;
+            case 's':
+                sscanf(optarg, "%d:%d", &frame.width, &frame.height);
+                resizable = GLFW_FALSE;
+                break;
+            case 'f':
+                frametime = 1.0f / atof(optarg);
+                fixed = 1;
+                break;
+            case 'c':
+                maxframe = strtoull(optarg, NULL, 10);
+                set_maxframe = 1;
+                break;
             default:
-                info("argv: unrecognized option `%c'", c);
+                error("unrecognized option: %c", c);
                 usage();
                 return 1;
         }
     }
 
-    if(!(pipeline = argv[optind])) {
-        info("argv: no pipeline defined");
-        return 1;
+    if(!set_maxframe)
+        maxframe = argc - optind - 1;
+    if(!batch)
+        maxframe = 1LLU;
+    info("maxframe = %llu", maxframe);
+
+    if(!argv[optind]) {
+        error("no pipeline specified");
+        abort();
     }
 
-    if(batchmode) {
-        if(!maxframe) {
-            info("setting maxframe to \033[1;36mULLONG_MAX (%llu)\033[0m", ULLONG_MAX);
-            maxframe = ULLONG_MAX;
-        }
-    }
-    else {
-        info("setting maxframe to \033[1;34m1\033[0m");
-        maxframe = 1ULL;
+    pipeline_path = argv[optind++];
+
+    if(frame.width <= 16) {
+        frame.width = 640;
+        info("window width is too small, setting to %d", frame.width);
     }
 
-    if(batchmode) {
-        kstrncat(outprefix, "/", sizeof(outprefix));
-        pathptr = outpath;
-    }
-    else {
-        /* In single-image mode the -o parameter
-         * is treated as a complete filepath */
-        pathptr = outprefix;
+    if(frame.height <= 16) {
+        frame.height = 480;
+        info("window height is too small, setting to %d", frame.height);
     }
 
-    optind++;
-
-    if(width <= 16)
-        width = 640;
-    if(height <= 16)
-        height = 480;
-    info("size: %dx%d", width, height);
+    info("size: %dx%d", frame.width, frame.height);
+    info("resizable: %s", resizable ? "yes" : "no");
 
     glfwSetErrorCallback(&on_glfw_error);
 
     if(!glfwInit()) {
-        panic("glfw: init failed");
+        error("glfw: init failed");
+        abort();
     }
 
     glfwWindowHint(GLFW_RESIZABLE, resizable);
@@ -576,53 +729,51 @@ int main(int argc, char **argv)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 
-    window = glfwCreateWindow(width, height, "riteg", NULL, NULL);
-
-    if(!window) {
-        panic("glfw: unable to create a window");
+    if(!(window = glfwCreateWindow(frame.width, frame.height, "RITEG", NULL, NULL))) {
+        error("glfw: creating a window failed");
+        abort();
     }
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
+    if(!gladLoadGL(&glfwGetProcAddress)) {
+        error("glad: unable to load function pointers");
+        abort();
+    }
+
     glfwSetFramebufferSizeCallback(window, &on_framebuffer_size);
     glfwSetKeyCallback(window, &on_key);
 
-    on_framebuffer_size(window, width, height);
+    /* Refresh the framebuffer parameters */
+    on_framebuffer_size(window, frame.width, frame.height);
 
-    if(!gladLoadGL(&glfwGetProcAddress)) {
-        panic("glad: unable to load function pointers");
-    }
+    vert = compile_shader(GL_VERTEX_SHADER, vert_src);
 
-    vert = compile_shader(GL_VERTEX_SHADER, vert_source_minified);
+    glCreateBuffers(1, &ubo);
+    glNamedBufferStorage(ubo, sizeof(pass_params_t), NULL, GL_DYNAMIC_STORAGE_BIT);
 
-    glCreateBuffers(1, &uargs);
-    glCreateBuffers(1, &uparams);
     glCreateVertexArrays(1, &vao);
 
-    glNamedBufferStorage(uargs, sizeof(r_uargs_t), NULL, GL_DYNAMIC_STORAGE_BIT);
-    glNamedBufferStorage(uparams, sizeof(r_uparams_t), NULL, GL_DYNAMIC_STORAGE_BIT);
-
-    info("pipeline: %s", pipeline);
-    parse_file(pipeline);
+    info("loading %s", pipeline_path);
+    parse_file(pipeline_path);
 
     stbi_set_flip_vertically_on_load(1);
     stbi_flip_vertically_on_write(1);
 
     curtime = glfwGetTime();
-    lasttime = curtime;
+    lasttime = curtime - 0.16f;
 
     while(!glfwWindowShouldClose(window)) {
         if(argv[optind]) {
             unload_image();
-            info("==> loading %s", argv[optind]);
-            load_image(argv[optind]);
-            optind++;
+            info("loading %s", argv[optind]);
+            load_image(argv[optind++]);
         }
 
-        if(fixframetime) {
+        if(fixed) {
             curtime += frametime;
-            lasttime = curtime;
+            lasttime += frametime;
         }
         else {
             curtime = glfwGetTime();
@@ -630,44 +781,66 @@ int main(int argc, char **argv)
             lasttime = curtime;
         }
 
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, uargs);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 1, uparams);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+
         glBindVertexArray(vao);
 
-        for(i = 0; i < num_passes; render_pass(&passes[i++]));
+        for(i = 0; i < num_passes; draw_pass(&passes[i++]));
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, frame.width, frame.height);
-        glBlitNamedFramebuffer(blit_tex->framebuffer, 0, 0, 0, blit_tex->width, blit_tex->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
-        if(outprefix[0] && nframe < maxframe) {
-            if(batchmode)
-                snprintf(outpath, sizeof(outpath), "%sRITEG-%llu.jpg", outprefix, nframe);
+        glBlitNamedFramebuffer(blit->fbo, frame.fbo, 0, 0, blit->width, blit->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBlitNamedFramebuffer(blit->fbo, 0, 0, 0, blit->width, blit->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+        if(output_fmt[0] && counter < maxframe) {
+            snprintf(output_path, sizeof(output_path), output_fmt, 1LLU + counter++);
+
             glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
-            c = stbi_write_jpg(pathptr, frame.width, frame.height, 3, frame.pixels, jpeg_quality);
-            info("==> saving %s %s", pathptr, c ? "\033[1;32mok\033[0m" : "\033[1;31mfail\033[0m");
-            nframe++;
+
+            switch(output_ext) {
+                case EXT_JPEG:
+                    c = stbi_write_jpg(output_path, frame.width, frame.height, 3, frame.pixels, 100);
+                    break;
+                case EXT_PNG:
+                    c = stbi_write_png(output_path, frame.width, frame.height, 3, frame.pixels, 3 * frame.width);
+                    break;
+                case EXT_TGA:
+                    c = stbi_write_tga(output_path, frame.width, frame.height, 3, frame.pixels);
+                    break;
+                case EXT_BMP:
+                    c = stbi_write_bmp(output_path, frame.width, frame.height, 3, frame.pixels);
+                    break;
+            }
+
+            info("write %s %s", output_path, c ? "\033[1;32mOK\033[0m" : "\033[1;31mFAIL\033[0m");
         }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    unload_image();
+    for(i = 0; i < num_passes; ++i) {
+        glDeleteProgram(passes[i].prog);
+        free(passes[i].samplers);        
+    }
 
     for(i = 0; i < num_textures; ++i) {
-        glDeleteFramebuffers(1, &textures[i].framebuffer);
-        glDeleteTextures(1, &textures[i].handle);
+        glDeleteFramebuffers(1, &textures[i].fbo);
+        glDeleteTextures(1, &textures[i].tex);
         free(textures[i].pixels);
     }
 
+    free(passes);
     free(textures);
 
     glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(1, &uparams);
-    glDeleteBuffers(1, &uargs);
-
+    glDeleteBuffers(1, &ubo);
     glDeleteShader(vert);
+
+    glDeleteFramebuffers(1, &frame.fbo);
+    glDeleteTextures(1, &frame.tex);
+    free(frame.pixels);
 
     glfwDestroyWindow(window);
     glfwTerminate();

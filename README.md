@@ -12,12 +12,12 @@ Realtime-ish Image Transforming Enhanced with OpenGL
 * [Shader copypasta](https://github.com/untodesu/riteg/wiki/Shader-copypasta)
 
 # Examples (vhs.v2.json)
-![](RITEG-4.jpg)  
-![](RITEG-5.jpg)  
-![](RITEG-6.jpg)  
-![](RITEG-7.jpg)  
-![](RITEG-8.jpg)  
-![](RITEG-9.jpg)  
+![](RITEG-0005.jpg)  
+![](RITEG-0006.jpg)  
+![](RITEG-0007.jpg)  
+![](RITEG-0008.jpg)  
+![](RITEG-0009.jpg)  
+![](RITEG-0010.jpg)  
 
 # Example (checker.json)
 ![](RITEG-checkerboard.jpg)  

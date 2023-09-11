@@ -3,16 +3,13 @@
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 target;
 
-layout(binding = 0, std140) uniform uargs {
-    vec4 screen;
-    vec4 timing;
-};
-
-layout(binding = 1, std140) uniform uparams {
+layout(binding = 0, std140) uniform params {
     vec4 param_a;
     vec4 param_b;
     vec4 param_c;
     vec4 param_d;
+    vec4 screen;
+    vec4 timing;
 };
 
 uint hash(uint x)
