@@ -498,7 +498,7 @@ static void parse_passes(JSON_Object *restrict root, const char *filename)
 
 static void parse_file(const char *filename)
 {
-    JSON_Value *json = json_parse_file(filename);
+    JSON_Value *json = json_parse_file_with_comments(filename);
     JSON_Object *root;
     JSON_Value *vblit;
     const char *str;
