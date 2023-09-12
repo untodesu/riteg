@@ -35,15 +35,12 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float pixel = 1.0 / screen.x;
-    const float noise = rand(0.0, uv.y);
-
-    if(uv.y * screen.y > param_a.x) {
-        target = texture(image, uv - vec2(param_a.y * pixel * noise, 0.0));
-    }
-    else {
-        const vec4 color = texture(image, uv - vec2(param_a.z * pixel * noise, 0.0));
-        const float luma = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
-        target = vec4(luma, luma, luma, color.a);
-    }
+    const vec4 color = texture(image, uv);
+    const float factor = param_a.x * exp(-param_a.y * pow(color.x, param_a.z));
+    const float seed = rand(uv.x, uv.y);
+    const float noise_i = factor * rand(seed, uv.x);
+    const float noise_q = factor * rand(seed, uv.y);
+    target.y = color.y + noise_i;
+    target.z = color.z + noise_q;
+    target.xw = color.xw;
 }

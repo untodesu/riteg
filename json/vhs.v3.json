@@ -1,0 +1,77 @@
+{
+  "textures": {
+    "image_yiq": { "width": 720, "height": 480, "filter": true },
+    "luminance_blur": { "width": 720, "height": 480, "filter": true },
+    "luminance_blur_ds": { "width": 360, "height": 480, "filter": true },
+    "luminance_halo": { "width": 720, "height": 480, "filter": true },
+    "chrominance_noise": { "width": 360, "height": 480, "filter": true },
+    "chrominance_blur": { "width": 720, "height": 480, "flter": true },
+    "composite_yiq": { "width": 720, "height": 480, "filter": true },
+    "composite_yiq_dropout": { "width": 720, "height": 480, "filter": true },
+    "composite_yiq_switching": { "width": 720, "height": 480, "filter": true },
+    "composite_rgb": { "width": 720, "height": 480, "filter": true }
+  },
+  "blit": "composite_rgb",
+  "passes": [
+    {
+      "shader": "shaders/convert_rgb_to_yiq.frag",
+      "samplers": ["!image"],
+      "output": "image_yiq",
+      "params": []
+    },
+    {
+      "shader": "shaders/gaussblur_fast5.frag",
+      "samplers": ["image_yiq"],
+      "output": "luminance_blur",
+      "params": [1.0, 0.0]
+    },
+    {
+      "shader": "shaders/gaussblur_fast9.frag",
+      "samplers": ["image_yiq"],
+      "output": "luminance_blur_ds",
+      "params": [1.0, 0.0]
+    },
+    {
+      "shader": "shaders/blend_subtract.frag",
+      "samplers": ["luminance_blur", "luminance_blur_ds"],
+      "output": "luminance_halo",
+      "params": [2.0, 1.0]
+    },
+    {
+      "shader": "shaders/ntsc_chroma_noise.frag",
+      "samplers": ["image_yiq"],
+      "output": "chrominance_noise",
+      "params": [0.05, 10, 1.0]
+    },
+    {
+      "shader": "shaders/gaussblur_fast13.frag",
+      "samplers": ["chrominance_noise"],
+      "output": "chrominance_blur",
+      "params": [1.0, 0.0]
+    },
+    {
+      "shader": "shaders/ntsc_combine_yiq.frag",
+      "samplers": ["luminance_halo", "chrominance_blur"],
+      "output": "composite_yiq",
+      "params": []
+    },
+    {
+      "shader": "shaders/vhs_video_dropout.frag",
+      "samplers": ["composite_yiq"],
+      "output": "composite_yiq_dropout",
+      "params": [0.999999, 0.025, 0.0, 15]
+    },
+    {
+      "shader": "shaders/vhs_head_switching.frag",
+      "samplers": ["composite_yiq_dropout"],
+      "output": "composite_yiq_switching",
+      "params": [3, 0.5, 32]
+    },
+    {
+      "shader": "shaders/convert_yiq_to_rgb.frag",
+      "samplers": ["composite_yiq_switching"],
+      "output": "composite_rgb",
+      "params": []
+    }
+  ]
+}

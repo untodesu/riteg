@@ -12,11 +12,12 @@ layout(binding = 0, std140) uniform params {
     vec4 timing;
 };
 
-layout(binding = 0) uniform sampler2D a;
-layout(binding = 1) uniform sampler2D b;
+layout(binding = 0) uniform sampler2D image_a;
+layout(binding = 1) uniform sampler2D image_b;
 
 void main(void)
 {
-    target = texture(a, uv) * param_a.x;
-    target *= texture(b, uv) * param_a.y + param_a.z;
+    const vec4 a = texture(image_a, uv);
+    const vec4 b = texture(image_b, uv);
+    target = param_a.x * a - param_a.y * b;
 }

@@ -12,6 +12,8 @@ layout(binding = 0, std140) uniform params {
     vec4 timing;
 };
 
+layout(binding = 0) uniform sampler2D image;
+
 uint hash(uint x)
 {
     x ^= x >> 0x010U;
@@ -33,18 +35,16 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
-    const float steps = 4.0 + ceil(16 * rand(uv.y, uv.x));
     const float pixel = 1.0 / screen.x;
+    const float noise = rand(0.0, uv.y);
 
-    float noise = 0.0;
-    for(float i = 1.0; i <= steps; ++i)
-        noise += step(thres, rand(uv.x - i * pixel, uv.y)) / i * 16.0;
-    noise += step(thres, rand(uv.x, uv.y));
-    noise /= steps;
-
-    target.x = noise;
-    target.y = noise;
-    target.z = noise;
-    target.w = noise;
+    if(uv.y * screen.y > param_a.x) {
+        const vec2 uvmod = vec2(uv.x - param_a.y * pixel * noise, uv.y);
+        target = texture(image, uvmod);
+    }
+    else {
+        const vec2 uvmod = vec2(uv.x - param_a.z * pixel * noise, uv.y);
+        const vec4 color = texture(image, uvmod);
+        target = vec4(color.x, 0.0, 0.0, color.w);
+    }
 }
