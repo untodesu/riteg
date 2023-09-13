@@ -47,7 +47,7 @@
       "shader": "shaders/gaussblur_fast13.frag",
       "samplers": ["chrominance_noise"],
       "output": "chrominance_blur",
-      "params": [1.0, 0.0]
+      "params": [1.1, 0.0]
     },
     {
       "shader": "shaders/ntsc_combine_yiq.frag",
