@@ -59,13 +59,13 @@
       "shader": "shaders/vhs_video_dropout.frag",
       "samplers": ["composite_yiq"],
       "output": "composite_yiq_dropout",
-      "params": [0.999995, 0.0625, 0.00, 30]
+      "params": [0.999995, 0.03125, 200, 0.005]
     },
     {
       "shader": "shaders/vhs_head_switching.frag",
       "samplers": ["composite_yiq_dropout"],
       "output": "composite_yiq_switching",
-      "params": [3, 1, 32]
+      "params": [0.005, 0.75, 16]
     },
     {
       "shader": "shaders/convert_yiq_to_rgb.frag",

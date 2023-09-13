@@ -35,21 +35,21 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const vec2 huv = 0.5 * uv;
-    const float fx = rand(huv.x, huv.y);
-    const float fy = rand(fx, huv.y);
-    const float fz = rand(fx, huv.y);
+    const float fx = rand(uv.x, uv.y);
+    const float fy = rand(fx, uv.y);
+    const float fz = rand(fx, uv.y);
     const float pixel = 1.0 / screen.x;
     const float steps = 4.0 + ceil(16.0 * fx);
 
-    /* https://www.desmos.com/calculator/6oqhjkuhs4 */
-    const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
+    /* https://www.desmos.com/calculator/q1ynbyeyw2 */
+    const float thx = param_a.z * (uv.y - param_a.w);
+    const float thres = param_a.x - param_a.y * thx * exp(1.0 - thx);
 
-    float noise = step(thres, rand(huv.x, huv.y));
+    float noise = step(thres, rand(uv.x, uv.y));
     for(float i = 1.0; i <= steps; ++i)
-        noise += step(thres, rand(huv.x + i * pixel, huv.y)) / i * 16.0 * fy;
+        noise += step(thres, rand(uv.x + i * pixel, uv.y)) / i * 16.0 * fy;
     for(float i = 1.0; i <= steps; ++i)
-        noise += step(thres, rand(huv.x - i * pixel, huv.y)) / i * 32.0 * fz;
+        noise += step(thres, rand(uv.x - i * pixel, uv.y)) / i * 32.0 * fz;
     noise /= 2.0 * steps;
 
     const vec4 luma = texture(image, uv + vec2(15.0 * noise * (1.0 - thres), 0.0));

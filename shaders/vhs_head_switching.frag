@@ -38,7 +38,7 @@ void main(void)
     const float pixel = 1.0 / screen.x;
     const float noise = rand(0.0, uv.y);
 
-    if(uv.y * screen.y > param_a.x) {
+    if(uv.y >= param_a.x) {
         const vec2 uvmod = vec2(uv.x - param_a.y * pixel * noise, uv.y);
         target = texture(image, uvmod);
     }
