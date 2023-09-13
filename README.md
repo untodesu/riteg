@@ -5,6 +5,10 @@ Realtime-ish Image Transforming Enhanced with OpenGL
 
   [![](http://img.youtube.com/vi/AqyeJKgVvjk/maxresdefault.jpg)](https://www.youtube.com/watch?v=AqyeJKgVvjk)  
 
+* [YouTube VHS effect (v3) demo](https://www.youtube.com/watch?v=YYPVdMJoNWc)  
+
+  [![](http://img.youtube.com/vi/YYPVdMJoNWc/maxresdefault.jpg)](https://www.youtube.com/watch?v=YYPVdMJoNWc)  
+
 # Documentation
 * [Building](https://github.com/untodesu/riteg/wiki/Building)
 * [Command line usage](https://github.com/untodesu/riteg/wiki/Command-line-usage)
