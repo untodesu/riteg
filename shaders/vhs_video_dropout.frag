@@ -41,6 +41,8 @@ void main(void)
     const float fz = rand(fx, huv.y);
     const float pixel = 1.0 / screen.x;
     const float steps = 4.0 + ceil(16.0 * fx);
+
+    /* https://www.desmos.com/calculator/6oqhjkuhs4 */
     const float thres = min(param_a.x, 1.0 - param_a.y * pow(sin(3.14159265359 * pow(1 - uv.y - param_a.z, 2.0 * param_a.w)), 2.0));
 
     float noise = step(thres, rand(huv.x, huv.y));
