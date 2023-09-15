@@ -29,7 +29,7 @@
       "shader": "shaders/gaussblur_fast9.frag",
       "samplers": ["image_yiq"],
       "output": "luminance_blur_ds",
-      "params": [1.0, 0.0]
+      "params": [1.5, 0.0]
     },
     {
       "shader": "shaders/blend_subtract.frag",
@@ -41,13 +41,13 @@
       "shader": "shaders/ntsc_chroma_noise.frag",
       "samplers": ["image_yiq"],
       "output": "chrominance_noise",
-      "params": [0.05, 10, 1.0]
+      "params": [0.0125, 0.05, 50, 0.025]
     },
     {
       "shader": "shaders/gaussblur_fast13.frag",
       "samplers": ["chrominance_noise"],
       "output": "chrominance_blur",
-      "params": [1.1, 0.0]
+      "params": [1.5, 0.0]
     },
     {
       "shader": "shaders/ntsc_combine_yiq.frag",
@@ -59,13 +59,13 @@
       "shader": "shaders/vhs_video_dropout.frag",
       "samplers": ["composite_yiq"],
       "output": "composite_yiq_dropout",
-      "params": [0.999995, 0.03125, 200, 0.005]
+      "params": [0.999995, 0.0625, 175, 0.005]
     },
     {
       "shader": "shaders/vhs_head_switching.frag",
       "samplers": ["composite_yiq_dropout"],
       "output": "composite_yiq_switching",
-      "params": [0.005, 0.75, 16]
+      "params": [0.005, 0.5, 16]
     },
     {
       "shader": "shaders/convert_yiq_to_rgb.frag",
