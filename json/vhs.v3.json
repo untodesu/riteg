@@ -1,15 +1,15 @@
 {
   "textures": {
-    "image_yiq": { "width": 720, "height": 480, "filter": true },
-    "luminance_blur": { "width": 720, "height": 480, "filter": true },
-    "luminance_blur_ds": { "width": 360, "height": 480, "filter": true },
-    "luminance_halo": { "width": 720, "height": 480, "filter": true },
-    "chrominance_noise": { "width": 360, "height": 480, "filter": true },
-    "chrominance_blur": { "width": 720, "height": 480, "flter": true },
-    "composite_yiq": { "width": 720, "height": 480, "filter": true },
-    "composite_yiq_dropout": { "width": 720, "height": 480, "filter": true },
-    "composite_yiq_switching": { "width": 720, "height": 480, "filter": true },
-    "composite_rgb": { "width": 720, "height": 480, "filter": true }
+    "image_yiq":                { "width": 320, "height": 240, "filter": true },
+    "luminance_blur":           { "width": 320, "height": 240, "filter": true },
+    "luminance_blur_ds":        { "width": 160, "height": 240, "filter": true },
+    "luminance_halo":           { "width": 320, "height": 240, "filter": true },
+    "chrominance_noise":        { "width": 320, "height": 240, "filter": true },
+    "chrominance_blur":         { "width": 160, "height": 240, "filter": true },
+    "composite_yiq":            { "width": 320, "height": 240, "filter": true },
+    "composite_yiq_dropout":    { "width": 320, "height": 240, "filter": true },
+    "composite_yiq_switching":  { "width": 320, "height": 240, "filter": true },
+    "composite_rgb":            { "width": 320, "height": 240, "filter": true }
   },
   "blit": "composite_rgb",
   "passes": [
@@ -29,7 +29,7 @@
       "shader": "shaders/gaussblur_fast9.frag",
       "samplers": ["image_yiq"],
       "output": "luminance_blur_ds",
-      "params": [1.5, 0.0]
+      "params": [2.0, 0.0]
     },
     {
       "shader": "shaders/blend_subtract.frag",
@@ -41,7 +41,7 @@
       "shader": "shaders/ntsc_chroma_noise.frag",
       "samplers": ["image_yiq"],
       "output": "chrominance_noise",
-      "params": [0.0125, 0.05, 50, 0.025]
+      "params": [0.0005, 0.03, 50, 0.025]
     },
     {
       "shader": "shaders/gaussblur_fast13.frag",
@@ -59,7 +59,7 @@
       "shader": "shaders/vhs_video_dropout.frag",
       "samplers": ["composite_yiq"],
       "output": "composite_yiq_dropout",
-      "params": [0.999995, 0.0625, 175, 0.005]
+      "params": [0.999995, 0.0, 200, 0.00625]
     },
     {
       "shader": "shaders/vhs_head_switching.frag",
