@@ -135,7 +135,7 @@ static float curtime;
 static float lasttime;
 static float frametime;
 
-/* https://github.com/feltsys/felt/blob/master/lib/strings/kstrncpy.c */
+/* https://github.com/vxsys/vx/blob/master/lib/kstrncpy.c */
 static char *kstrncpy(char *restrict s1, const char *restrict s2, size_t n)
 {
     char *save = s1;
