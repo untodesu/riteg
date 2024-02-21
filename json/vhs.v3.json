@@ -1,10 +1,12 @@
 {
   "textures": {
+    "image_sharp":              { "width": 640, "height": 480, "filter": true },
+    "image_gc":                 { "width": 640, "height": 480, "filter": true },
     "image_yiq":                { "width": 640, "height": 480, "filter": true },
     "luminance_blur":           { "width": 640, "height": 480, "filter": true },
     "luminance_blur_ds":        { "width": 320, "height": 480, "filter": true },
     "luminance_halo":           { "width": 640, "height": 480, "filter": true },
-    "chrominance_noise":        { "width": 640, "height": 480, "filter": true },
+    "chrominance_noise":        { "width": 320, "height": 480, "filter": true },
     "chrominance_blur":         { "width": 320, "height": 480, "filter": true },
     "composite_yiq":            { "width": 640, "height": 480, "filter": true },
     "composite_yiq_dropout":    { "width": 320, "height": 240, "filter": true },
@@ -14,8 +16,20 @@
   "blit": "composite_rgb",
   "passes": [
     {
-      "shader": "shaders/convert_rgb_to_yiq.frag",
+      "shader": "shaders/vid_sharpen.frag",
       "samplers": ["!image"],
+      "output": "image_sharp",
+      "params": [0.5]
+    },
+    {
+      "shader": "shaders/vid_gamma.frag",
+      "samplers": ["image_sharp"],
+      "output": "image_gc",
+      "params": [0.5]
+    },
+    {
+      "shader": "shaders/convert_rgb_to_yiq.frag",
+      "samplers": ["image_gc"],
       "output": "image_yiq",
       "params": []
     },
