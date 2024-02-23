@@ -586,7 +586,7 @@ static void on_framebuffer_size(GLFWwindow *window, int width, int height)
     frame.pixels = malloc_safe(3 * width * height);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &frame.tex);
-    glTextureStorage2D(frame.tex, 1, GL_RGBA16F, frame.width, frame.height);
+    glTextureStorage2D(frame.tex, 1, GL_RGBA32F, frame.width, frame.height);
     glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTextureParameteri(frame.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

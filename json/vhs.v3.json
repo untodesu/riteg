@@ -1,13 +1,14 @@
 {
   "textures": {
-    "image_sharp":              { "width": 640, "height": 480, "filter": true },
-    "image_gc":                 { "width": 640, "height": 480, "filter": true },
+    "image_sharpen":            { "width": 640, "height": 480, "filter": true },
+    "image_gamma":              { "width": 640, "height": 480, "filter": true },
+    "image_cutoff":             { "width": 640, "height": 480, "filter": true },
     "image_yiq":                { "width": 640, "height": 480, "filter": true },
     "luminance_blur":           { "width": 640, "height": 480, "filter": true },
     "luminance_blur_ds":        { "width": 320, "height": 480, "filter": true },
     "luminance_halo":           { "width": 640, "height": 480, "filter": true },
     "chrominance_noise":        { "width": 320, "height": 480, "filter": true },
-    "chrominance_blur":         { "width": 320, "height": 480, "filter": true },
+    "chrominance_blur":         { "width": 640, "height": 480, "filter": true },
     "composite_yiq":            { "width": 640, "height": 480, "filter": true },
     "composite_yiq_dropout":    { "width": 320, "height": 240, "filter": true },
     "composite_yiq_switching":  { "width": 320, "height": 240, "filter": true },
@@ -18,18 +19,24 @@
     {
       "shader": "shaders/vid_sharpen.frag",
       "samplers": ["!image"],
-      "output": "image_sharp",
+      "output": "image_sharpen",
       "params": [0.5]
     },
     {
       "shader": "shaders/vid_gamma.frag",
-      "samplers": ["image_sharp"],
-      "output": "image_gc",
+      "samplers": ["image_sharpen"],
+      "output": "image_gamma",
       "params": [0.5]
     },
     {
+      "shader": "shaders/vhs_cutoff.frag",
+      "samplers": ["image_gamma"],
+      "output": "image_cutoff",
+      "params": [0.01, 0.02]
+    },
+    {
       "shader": "shaders/convert_rgb_to_yiq.frag",
-      "samplers": ["image_gc"],
+      "samplers": ["image_cutoff"],
       "output": "image_yiq",
       "params": []
     },
@@ -40,7 +47,7 @@
       "params": [1.0, 0.0]
     },
     {
-      "shader": "shaders/gaussblur_fast9.frag",
+      "shader": "shaders/gaussblur_fast5.frag",
       "samplers": ["image_yiq"],
       "output": "luminance_blur_ds",
       "params": [2.0, 0.0]
@@ -55,7 +62,7 @@
       "shader": "shaders/ntsc_chroma_noise.frag",
       "samplers": ["image_yiq"],
       "output": "chrominance_noise",
-      "params": [0.0005, 0.03, 50, 0.025]
+      "params": [0.125, 0.05, 50, 0.02]
     },
     {
       "shader": "shaders/gaussblur_fast13.frag",
@@ -70,10 +77,10 @@
       "params": []
     },
     {
-      "shader": "shaders/vhs_video_dropout.frag",
+      "shader": "shaders/vhs_dropout.frag",
       "samplers": ["composite_yiq"],
       "output": "composite_yiq_dropout",
-      "params": [0.999998, 0.001, 200, 0.00]
+      "params": [0.9999995, 0.001, 200, 0.01]
     },
     {
       "shader": "shaders/vhs_head_switching.frag",

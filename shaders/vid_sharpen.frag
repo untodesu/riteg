@@ -23,5 +23,5 @@ void main(void)
     const vec4 d = texture(image, uv + vec2(-step.x,  step.y) * 1.5);
     const vec4 around = 0.25 * (a + b + c + d);
     const vec4 center = texture(image, uv);
-    target = center + (center - around) * param_a.x;
+    target = clamp(center + (center - around) * param_a.x, 0.0, 1.0);
 }

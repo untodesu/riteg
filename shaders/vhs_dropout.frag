@@ -45,7 +45,7 @@ void main(void)
     const float thx = param_a.z * (uv.y - param_a.w);
     const float thres = param_a.x - param_a.y * thx * exp(1.0 - thx);
 
-    float noise = step(thres, rand(uv.x, uv.y));
+    float noise = step(thres, rand(uv.y, uv.x));
     for(float i = 1.0; i <= steps; ++i)
         noise += step(thres, rand(uv.x + i * pixel, uv.y)) / i * 16.0 * fy;
     for(float i = 1.0; i <= steps; ++i)

@@ -35,17 +35,19 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const vec2 huv = 0.5 * uv;
     const vec4 color = texture(image, uv);
 
     /* https://www.desmos.com/calculator/npwr0ngspa */
     const float h = param_a.z * (color.x + param_a.w);
     const float f = param_a.x + param_a.y * h * exp(1.0 - h);
-    const float nx = rand(huv.x, huv.y);
-    const float ny = f * rand(nx, huv.y);
-    const float nz = f * rand(nx, huv.y);
+    const float ru = rand(uv.x, uv.y);
+    const float rv = rand(uv.y, uv.x);
+    const float rx = rand(ru, rv);
+    const float ry = rand(rv, ru);
+    const float nx = rx * step(0.95, rx);
+    const float ny = ry * step(0.95, ry);
 
-    target.y = color.y + ny;
-    target.z = color.z + nz;
+    target.y = color.y + f * nx;
+    target.z = color.z + f * ny;
     target.xw = color.xw;
 }
