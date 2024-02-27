@@ -50,12 +50,18 @@ void main(void)
         noise += step(thres, rand(uv.x + i * pixel, uv.y)) / i * 16.0 * fy;
     for(float i = 1.0; i <= steps; ++i)
         noise += step(thres, rand(uv.x - i * pixel, uv.y)) / i * 32.0 * fz;
-    noise /= 2.0 * steps;
+    noise = clamp(noise / steps * 0.5, 0.0, 1.0);
 
-    const vec4 luma = texture(image, uv + vec2(15.0 * noise * (1.0 - thres), 0.0));
-    const vec4 chroma = texture(image, uv);
-    target.x = mix(luma.x, 1.0, noise);
-    target.y = chroma.y;
-    target.z = chroma.z;
-    target.w = chroma.w;
+    const float linoise = rand(noise, uv.y);
+
+    if(linoise >= param_b.x) {
+        noise = 1.0 - noise;
+        noise *= rand(uv.x, linoise);
+    }
+
+    const vec4 color = texture(image, uv + vec2(4.0 * pixel * noise, 0.0));
+    target.x = color.x + noise;
+    target.y = color.y;
+    target.z = color.z;
+    target.w = color.w;
 }

@@ -8,8 +8,8 @@ layout(binding = 0) uniform sampler2D image;
 void main(void)
 {
     const vec4 color = texture(image, uv);
-    target.r = dot(color.xyz, vec3(1.000,  0.956,  0.619));
-    target.g = dot(color.xyz, vec3(1.000, -0.272, -0.647));
-    target.b = dot(color.xyz, vec3(1.000, -1.106,  1.703));
+    target.r = dot(color.xyz, vec3(1.0000,  0.9469,  0.6236));
+    target.g = dot(color.xyz, vec3(1.0000, -0.2748, -0.6357));
+    target.b = dot(color.xyz, vec3(1.0000, -1.1000,  1.7000));
     target.a = color.w;
 }

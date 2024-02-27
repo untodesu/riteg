@@ -31,6 +31,9 @@
  * referencing the currently loaded input frame */
 #define TEXNAME_IMAGE "!image"
 
+/* Reserved texture name for a blank black texture */
+#define TEXNAME_BLANK "!blank"
+
 /* 8 additional parameters are packed in form
  * of two float 4D vectors (vec4) and contain
  * information about resolutions and timings */
@@ -123,6 +126,7 @@ static texture_t *textures;
 static texture_t *blit;
 static texture_t frame;
 static texture_t image;
+static texture_t blank;
 
 static size_t num_passes;
 static pass_t *passes;
@@ -337,6 +341,10 @@ static texture_t *find_texture(const char *restrict name, int reserved)
 
         if(!strcmp(name, TEXNAME_IMAGE)) {
             return &image;
+        }
+
+        if(!strcmp(name, TEXNAME_BLANK)) {
+            return &blank;
         }
     }
 
@@ -775,6 +783,25 @@ int main(int argc, char **argv)
 
     stbi_set_flip_vertically_on_load(1);
     stbi_flip_vertically_on_write(1);
+
+    blank.width = 16;
+    blank.height = 16;
+    blank.pixels = NULL;
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &blank.tex);
+    glTextureStorage2D(blank.tex, 1, GL_RGBA16F, blank.width, blank.height);
+    glTextureParameteri(blank.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(blank.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(blank.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(blank.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glCreateFramebuffers(1, &blank.fbo);
+    glNamedFramebufferTexture(blank.fbo, GL_COLOR_ATTACHMENT0, blank.tex, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, blank.fbo);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     curtime = glfwGetTime();
     lasttime = curtime - 0.16f;

@@ -8,7 +8,7 @@ layout(binding = 1) uniform sampler2D image_iq;
 
 void main(void)
 {
-    const vec4 luma = texture(image_y, uv);
-    const vec4 chroma = texture(image_iq, uv);
-    target = vec4(luma.x, chroma.y, chroma.z, 1.0);
+    const vec4 Y = texture(image_y, uv);
+    const vec4 IQ = texture(image_iq, uv);
+    target = vec4(Y.x, IQ.y, IQ.z, 1.0);
 }
