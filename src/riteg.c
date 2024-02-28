@@ -1,19 +1,19 @@
-#define GLFW_INCLUDE_NONE
-
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
-#include <GLFW/glfw3.h>
-#include <glad/gl.h>
 #include <limits.h>
-#include <parson.h>
-#include <stb_image.h>
-#include <stb_image_write.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <GL/gl.h>
+#include <GLFW/glfw3.h>
+
+#include "parson.h"
+#include "stb_image.h"
+#include "stb_image_write.h"
 
 #define unused_argument(x) ((void)(x))
 
@@ -759,11 +759,6 @@ int main(int argc, char **argv)
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
-
-    if(!gladLoadGL(&glfwGetProcAddress)) {
-        error("glad: unable to load function pointers");
-        abort();
-    }
 
     glfwSetFramebufferSizeCallback(window, &on_framebuffer_size);
     glfwSetKeyCallback(window, &on_key);

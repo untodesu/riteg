@@ -1,10 +1,14 @@
-EXEC ?= riteg
-LIBS := src/gl.c src/parson.c src/stb.c
+CFLAGS += -Wall -Wextra -pedantic 
+CFLAGS += -D GL_GLEXT_PROTOTYPES
+CFLAGS += -I src -O2
+LDFLAGS += -lGL -lm -lglfw
 
-all: $(EXEC)
+C99 ?= c99
+
+all: riteg
 
 clean:
-	rm -fv $(EXEC)
+	rm -fv riteg
 
-$(EXEC): src/riteg.c | $(LIBS)
-	c99 $? $(LIBS) -o $@ -lm -lglfw -O2 -Iinclude -Wall -Wextra -Werror -pedantic
+riteg: src/parson.c src/riteg.c src/stb_impl.c
+	${C99} $? -o $@ ${CFLAGS} ${LDFLAGS}
