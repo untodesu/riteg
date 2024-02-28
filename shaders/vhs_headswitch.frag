@@ -37,18 +37,27 @@ void main(void)
 {
     const float pixel = 1.0 / screen.x;
     const float noise = rand(0.0, uv.y);
-    const vec2 pixcoord = uv * screen.xy;
+    const float thres = param_a.x / screen.y;
 
-    if(pixcoord.y <= param_a.x) {
-        const vec2 uvmod = vec2(uv.x + param_a.y * uv.y, uv.y);
-        const vec4 color = texture(image, uvmod);
-        target.x = color.x;
-        target.y = color.y * noise;
-        target.z = color.z * noise;
-        target.w = color.w;
+    if(uv.y <= thres) {
+        const vec2 uvmod = vec2(uv.x + param_a.y * uv.y - param_a.z, uv.y);
+
+        if(uvmod.x >= 0.0 && uvmod.x <= 1.0 && uvmod.y >= 0.0 && uvmod.y <= 1.0) {
+            const vec4 color = texture(image, uvmod);
+            target.x = color.x;
+            target.y = color.y * noise;
+            target.z = color.z * noise;
+            target.w = color.w;
+        }
+        else {
+            target.x = 0.0;
+            target.y = 0.0;
+            target.z = 0.0;
+            target.w = 1.0;
+        }
     }
     else {
-        const vec2 uvmod = vec2(uv.x - param_a.z * pixel * noise, uv.y);
+        const vec2 uvmod = vec2(uv.x - param_a.w * pixel * noise, uv.y);
         const vec4 color = texture(image, uvmod);
         target.x = color.x;
         target.y = color.y;

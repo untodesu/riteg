@@ -565,7 +565,7 @@ static void draw_pass(pass_t *restrict pass)
 
     glNamedBufferSubData(ubo, 0, sizeof(pass_params_t), pass->params);
 
-    for(i = 0; pass->samplers[i]; ++i)
+    for(i = 0; pass->samplers && pass->samplers[i]; ++i)
         glBindTextureUnit(i, pass->samplers[i]->tex);
     glUseProgram(pass->prog);
 

@@ -29,7 +29,14 @@ void main(void)
     const float X1 = +0.5 + param_b.x;
     for(float i = X0; i <= X1; i += dist) {
         const float coeff = exp(-1.0 * slope * abs(i - param_b.y));
-        target += coeff * texture(image, uv - i * texel * direction);
+        const vec2 uvmod = uv - i * texel * direction;
+
+        if(uvmod.x >= 0.0 && uvmod.x <= 1.0 && uvmod.y >= 0.0 && uvmod.y <= 1.0) {
+            /* All the samplers are set to CLAMP_TO_EDGE
+             * but in this case we don't even want invalid
+             * texture coordinates to contribute to the blur */
+            target += coeff * texture(image, uv - i * texel * direction);
+        }
     }
 
     target *= 1.0 + slope * exp(-1.0);
