@@ -1,30 +1,23 @@
 {
   "textures": {
-    "image_cutoff":           { "width": 480, "height": 240, "filter": true },
-    "image_yiq":              { "width": 480, "height": 240, "filter": true },
-    "luminance_lp":           { "width": 480, "height": 240, "filter": true },
-    "luminance_halo":         { "width": 480, "height": 240, "filter": true },
-    "luminance":              { "width": 480, "height": 240, "filter": true },
-    "chrominance_noise":      { "width": 480, "height": 240, "filter": true },
-    "chrominance_lp":         { "width": 480, "height": 240, "filter": true },
-    "chrominance":            { "width": 480, "height": 240, "filter": true },
-    "composite_yiq":          { "width": 480, "height": 240, "filter": true },
-    "composite_headswitch":   { "width": 480, "height": 240, "filter": true },
-    "composite_tracking":     { "width": 480, "height": 240, "filter": true },
-    "composite_dropout":      { "width": 480, "height": 240, "filter": true },
-    "composite_rgb":          { "width": 480, "height": 240, "filter": true }
+    "image_yiq":              { "width": 640, "height": 480, "filter": true },
+    "luminance_lp":           { "width": 640, "height": 480, "filter": true },
+    "luminance_halo":         { "width": 640, "height": 480, "filter": true },
+    "luminance":              { "width": 640, "height": 480, "filter": true },
+    "chrominance_noise":      { "width": 640, "height": 480, "filter": true },
+    "chrominance_lp":         { "width": 640, "height": 480, "filter": true },
+    "chrominance":            { "width": 640, "height": 480, "filter": true },
+    "composite_yiq":          { "width": 640, "height": 480, "filter": true },
+    "composite_headswitch":   { "width": 640, "height": 480, "filter": true },
+    "composite_tracking":     { "width": 640, "height": 480, "filter": true },
+    "composite_dropout":      { "width": 640, "height": 480, "filter": true },
+    "composite_rgb":          { "width": 640, "height": 480, "filter": true }
   },
   "blit": "composite_rgb",
   "passes": [
     {
-      "shader": "shaders/vhs_cutoff.frag",
-      "samplers": ["!image"],
-      "output": "image_cutoff",
-      "params": [0.01, 0.015]
-    },
-    {
       "shader": "shaders/colorspace_rgb_to_yiq.frag",
-      "samplers": ["image_cutoff"],
+      "samplers": ["!image"],
       "output": "image_yiq",
       "params": []
     },
@@ -38,13 +31,13 @@
       "shader": "shaders/blur_linear_exp.frag",
       "samplers": ["image_yiq"],
       "output": "luminance_halo",
-      "params": [64, 3.0, 8.0, 0.0, 0.5, 0.5]
+      "params": [64, 3.0, 24.0, 0.0]
     },
     {
       "shader": "shaders/blend_subtract.frag",
       "samplers": ["luminance_lp", "luminance_halo"],
       "output": "luminance",
-      "params": [1.5, 0.5]
+      "params": [2.0, 1.0]
     },
     {
       "shader": "shaders/ntsc_color_noise.frag",
@@ -80,7 +73,7 @@
       "shader": "shaders/vhs_tracking.frag",
       "samplers": ["composite_headswitch"],
       "output": "composite_tracking",
-      "params": [60, 1.5, 1.5]
+      "params": [40, 1.5, 1.5]
     },
     {
       "shader": "shaders/vhs_dropout.frag",

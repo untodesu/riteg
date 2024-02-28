@@ -60,8 +60,13 @@ void main(void)
     }
 
     const vec4 color = texture(image, uv + vec2(4.0 * pixel * noise, 0.0));
-    target.x = color.x + noise;
-    target.y = color.y;
-    target.z = color.z;
+
+    const float ymod = 0.5 * rand(uv.y, linoise);
+    const float imod = ymod * (rand(color.y, uv.y) - 0.5);
+    const float qmod = ymod * (rand(color.z, uv.y) - 0.5);
+
+    target.x = mix(color.x, 1.0, noise);
+    target.y = mix(color.y, imod, noise);
+    target.z = mix(color.z, qmod, noise);
     target.w = color.w;
 }
