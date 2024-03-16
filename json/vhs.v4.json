@@ -100,7 +100,7 @@
       "shader": "shaders/ntsc_composite_noise.frag",
       "samplers": ["composite_dropout"],
       "output": "composite_noise",
-      "params": [30, 0.7, 0.1]
+      "params": [30, 0.1, 0.1]
     },
     {
       "shader": "shaders/colorspace_yiq_to_rgb.frag",
