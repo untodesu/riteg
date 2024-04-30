@@ -37,20 +37,22 @@ void main(void)
     const float fy = rand(fx, uv.y);
     const float fz = rand(fx, uv.y);
     const float pixel = 1.0 / screen.x;
-    const float steps = 8.0 + ceil(32.0 * fx);
 
     /* https://www.desmos.com/calculator/q1ynbyeyw2 */
     const float thx = param_a.z * (uv.y - param_a.w);
     const float thres = param_a.x - param_a.y * thx * exp(1.0 - thx);
+    const float steps = (1.0 - thres) * 16.0 + ceil(param_b.x * fx);
+
+    float nx = exp(1.0 + rand(uv.y, 0.0));
 
     float noise = step(thres, rand(uv.y, uv.x));
-    for(float i = 1.0; i <= steps; ++i)
-        noise += step(thres, rand(uv.x - i * pixel, uv.y)) / i * 32.0 * fy;
+    for(float i = 1.0; i <= steps; i += 1.0)
+        noise += step(thres, rand(uv.x + i * pixel, uv.y)) * i;
     noise = clamp(noise / steps, 0.0, 1.0);
 
     const float linoise = rand(sin(noise), uv.y);
 
-    if(linoise >= param_b.x) {
+    if(linoise >= param_b.y) {
         noise = 1.0 - noise;
         noise *= rand(uv.x, linoise);
     }

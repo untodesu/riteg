@@ -1,6 +1,6 @@
 {
   "textures": {
-    "dropout_yiq":            { "width": 320, "height": 240, "filter": true },
+    "dropout_yiq":            { "width": 320, "height": 480, "filter": true },
     "image_gamma":            { "width": 640, "height": 480, "filter": true },
     "image_cutoff":           { "width": 640, "height": 480, "filter": true },
     "image_yiq":              { "width": 640, "height": 480, "filter": true },
@@ -22,7 +22,7 @@
       "shader": "shaders/gen_vhs_dropout.frag",
       "samplers": [],
       "output": "dropout_yiq",
-      "params": [0.999995, 0.01, 100, 0.0, 0.99995]
+      "params": [0.99999, 0.00001, 10, 0.005, 16, 0.99999]
     },
     {
       "shader": "shaders/video_gamma.frag",
@@ -88,7 +88,7 @@
       "shader": "shaders/vhs_tracking.frag",
       "samplers": ["composite_headswitch"],
       "output": "composite_tracking",
-      "params": [60, 16.0, 8.0]
+      "params": [60, 16.0, 0.7]
     },
     {
       "shader": "shaders/blend_vhs_dropout.frag",

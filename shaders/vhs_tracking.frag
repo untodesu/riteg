@@ -42,31 +42,11 @@ void main(void)
     const vec4 color = texture(image, uv + vec2(factor * wave * pixel, 0.0));
 
     const float ymod = param_a.z * dot(color.yz, color.yz);
-    const float imod = ymod * (2.0 * rand(uv.y, 0.0) - 1.0);
-    const float qmod = ymod * (2.0 * rand(0.0, uv.y) - 1.0);
+    const float imod = ymod * (2.0 * rand(0.5 * uv.y, 0.0) - 1.0);
+    const float qmod = ymod * (2.0 * rand(0.0, 0.5 * uv.y) - 1.0);
 
     target.x = color.x;
     target.y = mix(color.y, imod, factor);
     target.z = mix(color.z, qmod, factor);
     target.w = color.w;
-
-/*
-    const float fx = rand(0.0, uv.y);
-    const float fy = rand(fx, uv.x);
-    const float fz = rand(fx, uv.y);
-    const float pixel = 1.0 / screen.x;
-
-    const float factor = exp(-0.5 * param_a.x * uv.y);
-    const float wave = 2.0 * (rand(uv.y, 0.0) - 0.5);
-    const vec4 color = texture(image, uv);// + vec2(factor * param_a.y * wave * pixel, 0.0));
-
-    target.x = color.x;
-    target.w = color.w;
-
-    const float ymod = param_a.z;
-    const float imod = color.y * ymod * (fy - 0.5);
-    const float qmod = color.z * ymod * (fz - 0.5);
-    target.y = mix(color.y, imod, factor);
-    target.z = mix(color.z, qmod, factor);
-*/
 }
