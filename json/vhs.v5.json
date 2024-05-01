@@ -1,27 +1,37 @@
 {
   "textures": {
-    "gamma":        { "width": 640, "height": 480, "filter": true },
-    "cutoff":       { "width": 640, "height": 480, "filter": true },
-    "yiq":          { "width": 640, "height": 480, "filter": true },
-    "ntsc":         { "width": 640, "height": 240, "filter": true },
-    "dropout":      { "width": 640, "height": 240, "filter": true },
-    "snow":         { "width": 640, "height": 240, "filter": true },
-    "ntsc_yiq":     { "width": 640, "height": 240, "filter": true },
-    "composite":    { "width": 640, "height": 240, "filter": true },
-    "headswitch":   { "width": 640, "height": 240, "filter": true },
-    "tracking":     { "width": 640, "height": 240, "filter": true },
-    "result":       { "width": 640, "height": 240, "filter": true }
+    "dropout":            { "width": 320, "height": 240, "filter": true },
+    "gamma":              { "width": 640, "height": 240, "filter": true },
+    "cutoff":             { "width": 640, "height": 240, "filter": true },
+    "yiq":                { "width": 640, "height": 240, "filter": true },
+    "luminance_lpx":      { "width": 640, "height": 240, "filter": true },
+    "luminance_lpy":      { "width": 640, "height": 240, "filter": true },
+    "luminance":          { "width": 640, "height": 240, "filter": true },
+    "chrominance_noise":  { "width": 320, "height": 240, "filter": true },
+    "chrominance":        { "width": 320, "height": 240, "filter": true },
+    "composite":          { "width": 640, "height": 240, "filter": true },
+    "snow":               { "width": 640, "height": 240, "filter": true },
+    "headswitch":         { "width": 640, "height": 240, "filter": true },
+    "tracking":           { "width": 640, "height": 240, "filter": true },
+    "dropout_combine":    { "width": 640, "height": 240, "filter": true },
+    "result":             { "width": 640, "height": 240, "filter": true }
   },
   "blit": "result",
   "passes": [
     {
+      "shader": "shaders/vhs_dropout.frag",
+      "samplers": [],
+      "output": "dropout",
+      "params": [0.0001, 0.001, 20, 0.0, 0.01, 4.0, 16.0]
+    },
+    {
       "shader": "shaders/video_gamma.frag",
       "samplers": ["!image"],
       "output": "gamma",
-      "params": [0.6]
+      "params": [0.7]
     },
     {
-      "shader": "shaders/video_cutoff.frag",
+      "shader": "shaders/vhs_cutoff.frag",
       "samplers": ["gamma"],
       "output": "cutoff",
       "params": [0.005, 0.010]
@@ -33,50 +43,68 @@
       "params": []
     },
     {
-      "shader": "shaders/ntsc_modulate.frag",
+      "shader": "shaders/blur_linear_exp.frag",
       "samplers": ["yiq"],
-      "output": "ntsc",
-      "params": []
+      "output": "luminance_lpx",
+      "params": [64, 3.0, 8.0, 0.0]
     },
     {
-      "shader": "shaders/video_dropout.frag",
-      "samplers": ["ntsc"],
-      "output": "dropout",
-      "params": [0.0001, 0.001, 20, 0.0, 0.01, 8.0, 32.0]
+      "shader": "shaders/blur_linear_exp.frag",
+      "samplers": ["yiq"],
+      "output": "luminance_lpy",
+      "params": [64, 3.0, 16.0, 0.0]
     },
     {
-      "shader": "shaders/video_snow.frag",
-      "samplers": ["dropout"],
-      "output": "snow",
-      "params": [1.0, 0.0625]
+      "shader": "shaders/subtract.frag",
+      "samplers": ["luminance_lpx", "luminance_lpy"],
+      "output": "luminance",
+      "params": [2.0, 1.0]
     },
     {
-      "shader": "shaders/ntsc_demodulate.frag",
-      "samplers": ["snow"],
-      "output": "ntsc_yiq",
-      "params": []
+      "shader": "shaders/vhs_chrominance_noise.frag",
+      "samplers": ["yiq"],
+      "output": "chrominance_noise",
+      "params": [0.125, 0.05, 50, 0.02]
     },
     {
-      "shader": "shaders/ntsc_postprocess.frag",
-      "samplers": ["ntsc_yiq"],
+      "shader": "shaders/blur_linear_exp.frag",
+      "samplers": ["chrominance_noise"],
+      "output": "chrominance",
+      "params": [64, 3.0, 16.0, 0.0, 0.5, 0.5]
+    },
+    {
+      "shader": "shaders/ntsc_yiq_swizzle.frag",
+      "samplers": ["luminance", "chrominance"],
       "output": "composite",
-      "params": [1.0, 60.0]
+      "params": []
     },
     {
-      "shader": "shaders/video_headswitch.frag",
+      "shader": "shaders/ntsc_yiq_snow.frag",
       "samplers": ["composite"],
-      "output": "headswitch",
-      "params": [2, 2, 0.05, 0.5]
+      "output": "snow",
+      "params": [30, 0.01, 0.01]
     },
     {
-      "shader": "shaders/video_tracking.frag",
+      "shader": "shaders/vhs_headswitch.frag",
+      "samplers": ["snow"],
+      "output": "headswitch",
+      "params": [1, 2, 0.05, 0.5]
+    },
+    {
+      "shader": "shaders/vhs_tracking.frag",
       "samplers": ["headswitch"],
       "output": "tracking",
-      "params": [60, 4.0, 2]
+      "params": [60, 4.0, 4]
+    },
+    {
+      "shader": "shaders/vhs_dropout_combine.frag",
+      "samplers": ["tracking", "dropout"],
+      "output": "dropout_combine",
+      "params": []
     },
     {
       "shader": "shaders/color_yiq_to_rgb.frag",
-      "samplers": ["tracking"],
+      "samplers": ["dropout_combine"],
       "output": "result",
       "params": []
     }
