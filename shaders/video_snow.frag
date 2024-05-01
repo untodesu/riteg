@@ -12,7 +12,7 @@ layout(binding = 0, std140) uniform params {
     vec4 timing;
 };
 
-layout(binding = 0) uniform sampler2D image;
+layout(binding = 0) uniform sampler2D signal;
 
 uint hash(uint x)
 {
@@ -35,19 +35,7 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const vec4 color = texture(image, uv);
-
-    /* https://www.desmos.com/calculator/npwr0ngspa */
-    const float h = param_a.z * (color.x + param_a.w);
-    const float f = param_a.x + param_a.y * h * exp(1.0 - h);
-    const float ru = rand(uv.x, uv.y);
-    const float rv = rand(uv.y, uv.x);
-    const float rx = rand(ru, rv);
-    const float ry = rand(rv, ru);
-    const float nx = rx * step(0.95, rx);
-    const float ny = ry * step(0.95, ry);
-
-    target.y = color.y + f * nx;
-    target.z = color.z + f * ny;
-    target.xw = color.xw;
+    const ivec2 pixcoord = ivec2(screen.xy * uv);
+    const float value = texelFetch(signal, pixcoord, 0).x;
+    target.x = value + (param_a.x + value) * param_a.y * rand(uv.x, uv.y);
 }
