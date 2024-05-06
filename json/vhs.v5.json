@@ -73,13 +73,13 @@
       "params": [64, 3.0, 16.0, 0.0, 0.5, 0.5]
     },
     {
-      "shader": "shaders/ntsc_yiq_swizzle.frag",
+      "shader": "shaders/vhs_swizzle_yiq.frag",
       "samplers": ["luminance", "chrominance"],
       "output": "composite",
       "params": []
     },
     {
-      "shader": "shaders/ntsc_yiq_snow.frag",
+      "shader": "shaders/vhs_snow.frag",
       "samplers": ["composite"],
       "output": "snow",
       "params": [30, 0.01, 0.01]

@@ -1,0 +1,70 @@
+{
+  "textures": {
+    "dropout":          { "width": 320, "height": 240, "filter": true },
+    "gamma":            { "width": 640, "height": 240, "filter": true },
+    "yiq":              { "width": 640, "height": 240, "filter": true },
+    "signal":           { "width": 640, "height": 240, "filter": true },
+    "dropout_combine":  { "width": 640, "height": 240, "filter": true },
+    "snow":             { "width": 640, "height": 240, "filter": true },
+    "composite":        { "width": 640, "height": 240, "filter": true },
+    "postprocess":      { "width": 640, "height": 240, "filter": true },
+    "result":           { "width": 640, "height": 240, "filter": true }
+  },
+  "blit": "result",
+  "passes": [
+    {
+      "shader": "shaders/vhs_dropout.frag",
+      "samplers": [],
+      "output": "dropout",
+      "params": [0.0005, 0.001, 20, 0.0, 0.0, 4.0, 1.0]
+    },
+    {
+      "shader": "shaders/video_gamma.frag",
+      "samplers": ["!image"],
+      "output": "gamma",
+      "params": [0.8]
+    },
+    {
+      "shader": "shaders/color_rgb_to_yiq.frag",
+      "samplers": ["gamma"],
+      "output": "yiq",
+      "params": []
+    },
+    {
+      "shader": "shaders/ntsc_modulate.frag",
+      "samplers": ["yiq"],
+      "output": "signal",
+      "params": []
+    },
+    {
+      "shader": "shaders/add.frag",
+      "samplers": ["dropout", "signal"],
+      "output": "dropout_combine",
+      "params": [1.0, 1.0]
+    },
+    {
+      "shader": "shaders/ntsc_snow.frag",
+      "samplers": ["dropout_combine"],
+      "output": "snow",
+      "params": [1.0, 0.0625]
+    },
+    {
+      "shader": "shaders/ntsc_demodulate.frag",
+      "samplers": ["snow"],
+      "output": "composite",
+      "params": []
+    },
+    {
+      "shader": "shaders/ntsc_postprocess.frag",
+      "samplers": ["composite"],
+      "output": "postprocess",
+      "params": [1.0, 30.0, 90]
+    },
+    {
+      "shader": "shaders/color_yiq_to_rgb.frag",
+      "samplers": ["postprocess"],
+      "output": "result",
+      "params": []
+    }
+  ]
+}
