@@ -1,6 +1,7 @@
 {
   "textures": {
     "dropout":            { "width": 320, "height": 240, "filter": true },
+    "vflip":              { "width": 640, "height": 480, "filter": true },
     "gamma":              { "width": 640, "height": 240, "filter": true },
     "cutoff":             { "width": 640, "height": 240, "filter": true },
     "yiq":                { "width": 640, "height": 240, "filter": true },
@@ -25,8 +26,14 @@
       "params": [0.0001, 0.001, 20, 0.0, 0.01, 4.0, 16.0]
     },
     {
-      "shader": "shaders/video_gamma.frag",
+      "shader": "shaders/video_vflip.frag",
       "samplers": ["!image"],
+      "output": "vflip",
+      "params": []
+    },
+    {
+      "shader": "shaders/video_gamma.frag",
+      "samplers": ["vflip"],
       "output": "gamma",
       "params": [0.7]
     },
