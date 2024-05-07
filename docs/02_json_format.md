@@ -30,8 +30,10 @@
 3. `filter`: when true, linear filtering is applied when sampling the texture.
 
 ### Reserved texture names in use
-* `!image`: the source image.
-* `!frame`: the processed image blitted last frame.
+* `!blank`: a blank texture.  
+* `!image`: the source image.  
+* `!vflip`: the source image flipped vertically.  
+* `!frame`: the processed image blitted last frame.  
 
 ### Blit
 After running all the passes, RITEG will blit (copy) the specified texture to the window's framebuffer.

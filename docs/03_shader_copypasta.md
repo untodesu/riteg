@@ -5,7 +5,8 @@
 ```
 
 ### Fragment output and vertex input
-Vertex shader passes a single 2D vector with UV coordinates:
+Vertex shader passes a single 2D vector with UV coordinates:  
+
 ```glsl
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 target;
@@ -13,9 +14,10 @@ layout(location = 0) out vec4 target;
 
 ### Uniforms
 * 16 pass parameters are split into four 4D vectors.
-* Pass output framebuffer size is defined as `screen.xy` and window framebuffer size is defined as `screen.zw`.
-* Frametime is `timing.x`
+* Pass output framebuffer size is defined as `screen.xy` and window framebuffer size is defined as `screen.zw`.  
+* Frametime is `timing.x`  
 * Current time is `timing.y`  
+
 ```glsl
 layout(binding = 0, std140) uniform params {
     vec4 param_a;
@@ -32,6 +34,7 @@ layout(binding = 0, std140) uniform params {
 "samplers": ["image", "noise"]
 ```
 This will bind two samplers:  
+
 ```glsl
 layout(binding = 0) uniform sampler2D s1; /* image */
 layout(binding = 1) uniform sampler2D s2; /* noise */
