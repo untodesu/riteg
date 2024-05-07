@@ -17,7 +17,7 @@ Realtime-ish Image Transforming Enhanced with OpenGL
 * [Tips and Tricks](docs/04_tips_and_tricks.md)
 
 # Examples (4:3, checker.json)
-![](checker43-01.png)  
+![](checker43.png)  
 
 # Examples (4:3, vhs.v3.json)
 ![](vhs43-01.png)  
