@@ -1,6 +1,6 @@
 # Command-line usage
 ```
-usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] 1<pipeline> [paths...]
+usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] <pipeline> [paths...]
 options:
    -h          : print this message and exit
    -o <path>   : specify output path. FFmpeg path formatting works.

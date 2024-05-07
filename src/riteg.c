@@ -970,7 +970,7 @@ static void on_key(GLFWwindow *window, int key, int scancode, int action, int mo
 
 static void usage(void)
 {
-    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] 1<pipeline> [paths...]\n");
+    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] <pipeline> [paths...]\n");
     fprintf(stderr, "options:\n");
     fprintf(stderr, "   -h          : print this message and exit\n");
     fprintf(stderr, "   -o <path>   : specify output path. FFmpeg path formatting works.\n");
