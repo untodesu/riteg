@@ -552,7 +552,6 @@ static void draw_pass(pass_t *restrict pass)
 
 static void load_input(const char *restrict filename)
 {
-    double fps;
     unsigned i;
     int errnum;
     char str[1024] = { 0 };
@@ -648,8 +647,6 @@ static void process_input(void)
             response = av_read_frame(in_format, in_packet);
 
             if(response == AVERROR_EOF) {
-                if(maxframe == ULONG_MAX)
-                    close_output();
                 unload_input();
                 return;
             }
@@ -707,6 +704,7 @@ static void process_input(void)
                 glTextureSubImage2D(vflip.tex, 0, 0, 0, vflip.width, vflip.height, GL_RGB, GL_UNSIGNED_BYTE, vflip.pixels);
                 glTextureSubImage2D(image.tex, 0, 0, 0, image.width, image.height, GL_RGB, GL_UNSIGNED_BYTE, image.pixels);
                 av_packet_unref(in_packet);
+
                 return;
             }
 
@@ -717,6 +715,7 @@ static void process_input(void)
 
 static void init_output(const char *restrict filename)
 {
+    double guess;
     int errnum, cid;
     char str[1024] = { 0 };
     AVStream *ostream = NULL;
@@ -756,25 +755,26 @@ static void init_output(const char *restrict filename)
         abort();
     }
 
-    if(in_context) {
-        //out_context->bit_rate = 1280000;
-        out_context->gop_size = in_context->gop_size;
-        out_context->max_b_frames = in_context->max_b_frames;
-
-        out_context->framerate = av_guess_frame_rate(in_format, in_format->streams[in_stream_id], NULL);
+    if(framerate == 0UL) {
+        if(in_context) {
+            out_context->framerate = av_guess_frame_rate(in_format, in_format->streams[in_stream_id], NULL);
+            out_context->time_base.den = out_context->framerate.num;
+            out_context->time_base.num = out_context->framerate.den;
+        }
+        else {
+            out_context->time_base = ((AVRational){1, 60});
+            out_context->framerate = ((AVRational){60, 1});
+        }
+    }
+    else {
+        out_context->framerate.den = 1;
+        out_context->framerate.num = framerate;
         out_context->time_base.den = out_context->framerate.num;
         out_context->time_base.num = out_context->framerate.den;
     }
-    else {
-        //out_context->bit_rate = 1280000;
-        out_context->gop_size = 30;
-        out_context->max_b_frames = 1;
-    }
 
-    if((out_context->time_base.den == 0) || (out_context->time_base.num == 0)) {
-        out_context->time_base = ((AVRational){1, 60});
-        out_context->framerate = ((AVRational){60, 1});
-    }
+    out_context->gop_size = 1;
+    out_context->max_b_frames = 0;
 
     if(out_encoder->pix_fmts)
         out_context->pix_fmt = out_encoder->pix_fmts[0];
@@ -853,6 +853,14 @@ static void init_output(const char *restrict filename)
         error("%s: frame: %s", filename, str);
         abort();
     }
+
+    if(out_format && (maxframe == ULONG_MAX)) {
+        guess = in_format->duration;
+        guess /= 1000000.0; /* AVFormatContext::duration is in useconds */
+        guess *= out_context->framerate.num;
+        guess += out_context->framerate.num; /* CRUTCH: add extra second */
+        maxframe = ceil(guess);
+    }
 }
 
 static void close_output(void)
@@ -868,7 +876,7 @@ static void close_output(void)
     }
 }
 
-static void process_output_video(void)
+static void process_output_video()
 {
     char str[1024];
     int linesize = 3 * frame.width;
