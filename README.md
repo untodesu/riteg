@@ -10,10 +10,11 @@ Realtime-ish Image Transforming Enhanced with OpenGL
   [![](http://img.youtube.com/vi/YYPVdMJoNWc/maxresdefault.jpg)](https://www.youtube.com/watch?v=YYPVdMJoNWc)  
 
 # Documentation
-* [Building](https://github.com/untodesu/riteg/wiki/Building)
-* [Command line usage](https://github.com/untodesu/riteg/wiki/Command-line-usage)
-* [JSON format](https://github.com/untodesu/riteg/wiki/JSON-format)
-* [Shader copypasta](https://github.com/untodesu/riteg/wiki/Shader-copypasta)
+* [Building](docs/00_building.md)
+* [Command line usage](docs/01_commandline.md)
+* [JSON format](docs/02_json_format.md)
+* [Shader copypasta](docs/03_shader_copypasta.md)
+* [Tips and Tricks](docs/04_tips_and_tricks.md)
 
 # Examples (4:3, checker.json)
 ![](checker43-01.png)  
