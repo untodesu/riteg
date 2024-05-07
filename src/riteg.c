@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* Copyright (c) 2023..2024, Kirill GPRB */
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
@@ -19,8 +21,6 @@
 #include <libswscale/swscale.h>
 
 #include "parson.h"
-#include "stb_image.h"
-#include "stb_image_write.h"
 
 #define unused_argument(x) ((void)(x))
 
@@ -854,7 +854,7 @@ static void init_output(const char *restrict filename)
         abort();
     }
 
-    if(out_format && (maxframe == ULONG_MAX)) {
+    if(in_format && (maxframe == ULONG_MAX)) {
         guess = in_format->duration;
         guess /= 1000000.0; /* AVFormatContext::duration is in useconds */
         guess *= out_context->framerate.num;
@@ -1070,9 +1070,6 @@ int main(int argc, char **argv)
 
     info("loading %s", pipeline_path);
     parse_file(pipeline_path);
-
-    stbi_set_flip_vertically_on_load(1);
-    stbi_flip_vertically_on_write(1);
 
     load_input(argv[optind++]);
     init_output(output_path);

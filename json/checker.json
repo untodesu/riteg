@@ -9,7 +9,7 @@
   "blit": "final",
   "passes": [
     {
-      "shader": "shaders/gen_checkerboard.frag",
+      "shader": "shaders/checkerboard.frag",
       "samplers": [],
       "output": "final",
       "params": [ 32 ]

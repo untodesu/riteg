@@ -12,5 +12,5 @@ all: riteg
 clean:
 	rm -fv riteg
 
-riteg: src/parson.c src/riteg.c src/stb_impl.c
+riteg: src/parson.c src/riteg.c
 	${C99} $^ -o $@ ${CFLAGS} ${LDFLAGS}
