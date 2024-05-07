@@ -1,7 +1,6 @@
 {
   "textures": {
     "dropout":            { "width": 320, "height": 240, "filter": true },
-    "vflip":              { "width": 640, "height": 480, "filter": true },
     "gamma":              { "width": 640, "height": 240, "filter": true },
     "cutoff":             { "width": 640, "height": 240, "filter": true },
     "yiq":                { "width": 640, "height": 240, "filter": true },
@@ -10,7 +9,7 @@
     "luminance":          { "width": 640, "height": 240, "filter": true },
     "chrominance_noise":  { "width": 320, "height": 240, "filter": true },
     "chrominance":        { "width": 320, "height": 240, "filter": true },
-    "composite":          { "width": 640, "height": 240, "filter": true },
+    "yiq_swizzle":        { "width": 640, "height": 240, "filter": true },
     "snow":               { "width": 640, "height": 240, "filter": true },
     "headswitch":         { "width": 640, "height": 240, "filter": true },
     "tracking":           { "width": 640, "height": 240, "filter": true },
@@ -23,17 +22,11 @@
       "shader": "shaders/vhs_dropout.frag",
       "samplers": [],
       "output": "dropout",
-      "params": [0.0001, 0.001, 20, 0.0, 0.01, 4.0, 16.0]
-    },
-    {
-      "shader": "shaders/video_vflip.frag",
-      "samplers": ["!image"],
-      "output": "vflip",
-      "params": []
+      "params": [0.0005, 0.001, 20, 0.0, 0.001, 4.0, 16.0]
     },
     {
       "shader": "shaders/video_gamma.frag",
-      "samplers": ["vflip"],
+      "samplers": ["!image"],
       "output": "gamma",
       "params": [0.7]
     },
@@ -82,12 +75,12 @@
     {
       "shader": "shaders/vhs_swizzle_yiq.frag",
       "samplers": ["luminance", "chrominance"],
-      "output": "composite",
+      "output": "yiq_swizzle",
       "params": []
     },
     {
       "shader": "shaders/vhs_snow.frag",
-      "samplers": ["composite"],
+      "samplers": ["yiq_swizzle"],
       "output": "snow",
       "params": [30, 0.01, 0.01]
     },
@@ -101,7 +94,7 @@
       "shader": "shaders/vhs_tracking.frag",
       "samplers": ["headswitch"],
       "output": "tracking",
-      "params": [60, 4.0, 4]
+      "params": [70, 5.0, 4]
     },
     {
       "shader": "shaders/vhs_dropout_combine.frag",

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <GL/gl.h>
 #include <GLFW/glfw3.h>
@@ -14,6 +15,7 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 
 #include "parson.h"
@@ -36,6 +38,11 @@
  * referencing the currently loaded input frame */
 #define TEXNAME_IMAGE "!image"
 
+/* Reserver texture name for a built-in texture
+ * referencing the currently loaded input frame
+ * that is vertically flipped because opengl is stupid */
+#define TEXNAME_VFLIP "!vflip"
+
 /* Reserved texture name for a blank black texture */
 #define TEXNAME_BLANK "!blank"
 
@@ -43,12 +50,6 @@
  * of two float 4D vectors (vec4) and contain
  * information about resolutions and timings */
 typedef float pass_params_t[MAX_PARAM + 8];
-
-enum {
-    INPUT_MORE = 0,
-    INPUT_DONE = 1,
-    INPUT_FAIL = 2,
-};
 
 typedef struct {
     int width;
@@ -126,16 +127,23 @@ static texture_t *textures;
 static texture_t *blit;
 static texture_t frame;
 static texture_t image;
+static texture_t vflip;
 static texture_t blank;
 
-static AVFormatContext *in_ctx = NULL;
+static AVFormatContext *in_format = NULL;
 static const AVCodecParameters *in_params = NULL;
-static const AVCodec *in_vcodec = NULL;
-static AVCodecContext *in_vctx = NULL;
-static AVPacket *in_vpacket = NULL;
-static AVFrame *in_vframe = NULL;
-static AVFrame *in_target = NULL;
-static int in_vcodec_stream_id = 0;
+static const AVCodec *in_decoder = NULL;
+static AVCodecContext *in_context = NULL;
+static AVPacket *in_packet = NULL;
+static AVFrame *in_frame = NULL;
+static int in_stream_id = INT_MAX;
+
+static AVFormatContext *out_format = NULL;
+static AVCodecParameters *out_params = NULL;
+static const AVCodec *out_encoder = NULL;
+static AVCodecContext *out_context = NULL;
+static AVPacket *out_packet = NULL;
+static AVFrame *out_frame = NULL;
 
 static size_t num_passes;
 static pass_t *passes;
@@ -147,6 +155,12 @@ static unsigned int vao;
 static float curtime;
 static float lasttime;
 static float frametime;
+static unsigned long framenum;
+static unsigned long maxframe;
+static unsigned long framerate;
+
+static void close_output();
+static void unload_input();
 
 /* https://github.com/vxsys/vx/blob/master/lib/kstrncpy.c */
 static char *kstrncpy(char *restrict s1, const char *restrict s2, size_t n)
@@ -301,17 +315,14 @@ static texture_t *find_texture(const char *restrict name, int reserved)
     size_t i;
 
     if(reserved) {
-        if(!strcmp(name, TEXNAME_FRAME)) {
+        if(!strcmp(name, TEXNAME_FRAME))
             return &frame;
-        }
-
-        if(!strcmp(name, TEXNAME_IMAGE)) {
+        if(!strcmp(name, TEXNAME_IMAGE))
             return &image;
-        }
-
-        if(!strcmp(name, TEXNAME_BLANK)) {
+        if(!strcmp(name, TEXNAME_VFLIP))
+            return &vflip;
+        if(!strcmp(name, TEXNAME_BLANK))
             return &blank;
-        }
     }
 
     for(i = 0; i < num_textures; ++i) {
@@ -541,6 +552,7 @@ static void draw_pass(pass_t *restrict pass)
 
 static void load_input(const char *restrict filename)
 {
+    double fps;
     unsigned i;
     int errnum;
     char str[1024] = { 0 };
@@ -552,8 +564,8 @@ static void load_input(const char *restrict filename)
         return;
     }
 
-    in_ctx = avformat_alloc_context();
-    errnum = avformat_open_input(&in_ctx, filename, NULL, NULL);
+    in_format = avformat_alloc_context();
+    errnum = avformat_open_input(&in_format, filename, NULL, NULL);
 
     if(errnum) {
         av_strerror(errnum, str, sizeof(str));
@@ -561,8 +573,16 @@ static void load_input(const char *restrict filename)
         abort();
     }
 
-    for(i = 0; i < in_ctx->nb_streams; ++i) {
-        params = in_ctx->streams[i]->codecpar;
+    errnum = avformat_find_stream_info(in_format, NULL);
+
+    if(errnum) {
+        av_strerror(errnum, str, sizeof(str));
+        error("%s: %s", filename, str);
+        abort();
+    }
+
+    for(i = 0; i < in_format->nb_streams; ++i) {
+        params = in_format->streams[i]->codecpar;
         codec = avcodec_find_decoder(params->codec_id);
 
         if(codec == NULL) {
@@ -573,25 +593,25 @@ static void load_input(const char *restrict filename)
             continue;
         }
 
-        if(!in_vcodec && (codec->type == AVMEDIA_TYPE_VIDEO)) {
-            in_vcodec_stream_id = i;
+        if(!in_decoder && (codec->type == AVMEDIA_TYPE_VIDEO)) {
+            in_stream_id = i;
             in_params = params;
-            in_vcodec = codec;
+            in_decoder = codec;
             continue;
         }
     }
 
-    if(!in_vcodec) {
+    if(!in_decoder) {
         warn("%s: container has no supported video", filename);
         return;
     }
 
-    info("%s: video: %s", filename, in_vcodec->long_name);
+    info("%s: video: %s", filename, in_decoder->long_name);
     info("%s: video: %dx%d", filename, in_params->width, in_params->height);
 
-    in_vctx = avcodec_alloc_context3(in_vcodec);
-    avcodec_parameters_to_context(in_vctx, in_params);
-    errnum = avcodec_open2(in_vctx, in_vcodec, NULL);
+    in_context = avcodec_alloc_context3(in_decoder);
+    avcodec_parameters_to_context(in_context, in_params);
+    errnum = avcodec_open2(in_context, in_decoder, NULL);
 
     if(errnum) {
         av_strerror(errnum, str, sizeof(str));
@@ -599,122 +619,334 @@ static void load_input(const char *restrict filename)
         abort();
     }
 
-    in_vpacket = av_packet_alloc();
-    in_vframe = av_frame_alloc();
+    in_packet = av_packet_alloc();
+    in_frame = av_frame_alloc();
 }
 
 static void unload_input(void)
 {
-    if(in_ctx) {
-        av_frame_free(&in_target);
-        av_frame_free(&in_vframe);
-        av_packet_free(&in_vpacket);
+    if(in_format) {
+        av_frame_free(&in_frame);
+        av_packet_free(&in_packet);
 
-        avformat_close_input(&in_ctx);
-        avcodec_free_context(&in_vctx);
+        avformat_close_input(&in_format);
+        avcodec_free_context(&in_context);
     }
 }
 
 static void process_input(void)
 {
     int response;
+    int vflip_linesize;
+    int image_linesize;
+    unsigned char *vflip_pixels;
     char str[1024] = { 0 };
     struct SwsContext *sws;
 
-    while(in_ctx && (av_read_frame(in_ctx, in_vpacket) >= 0)) {
-        if(in_vpacket->stream_index != in_vcodec_stream_id) {
-            av_packet_unref(in_vpacket);
-            continue;
-        }
+    if(in_format) {
+        for(;;) {
+            response = av_read_frame(in_format, in_packet);
 
-        response = avcodec_send_packet(in_vctx, in_vpacket);
-
-        if(response) {
-            av_strerror(response, str, sizeof(str));
-            warn("video: %s", str);
-            unload_input();
-            return;
-        }
-
-        while(response >= 0) {
-            response = avcodec_receive_frame(in_vctx, in_vframe);
-
-            if(response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
-                /* Not enough data for a full frame, we
-                 * should keep reading until it's enough */
-                break;
+            if(response == AVERROR_EOF) {
+                if(maxframe == ULONG_MAX)
+                    close_output();
+                unload_input();
+                return;
             }
 
             if(response < 0) {
+                av_packet_unref(in_packet);
+                break;
+            }
+
+            if(in_packet->stream_index != in_stream_id) {
+                av_packet_unref(in_packet);
+                continue;
+            }
+
+            response = avcodec_send_packet(in_context, in_packet);
+
+            if(response) {
                 av_strerror(response, str, sizeof(str));
                 warn("video: %s", str);
                 unload_input();
                 return;
             }
 
-            sws = sws_getContext(
-                in_vframe->width, in_vframe->height, in_vframe->format,
-                in_target->width, in_target->height, in_target->format,
-                SWS_BILINEAR, NULL, NULL, NULL);
-            sws_scale(sws, (const uint8_t * const*)in_vframe->data,
-                in_vframe->linesize, 0, in_vframe->height, in_target->data,
-                in_target->linesize);
-            sws_freeContext(sws);
+            while(response >= 0) {
+                response = avcodec_receive_frame(in_context, in_frame);
 
-            if(in_target->linesize[0] != (image.width * 3)) {
-                warn("video: linesize sanity check failed");
-                warn("video: linesize[0] is not %zu", (size_t)(image.width * 3));
-                unload_input();
+                if(response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
+                    /* Not enough data for a full frame, we
+                    * should keep reading until it's enough */
+                    break;
+                }
+
+                if(response < 0) {
+                    av_strerror(response, str, sizeof(str));
+                    warn("video: %s", str);
+                    unload_input();
+                    return;
+                }
+
+                vflip_linesize = 3 * vflip.width;
+                image_linesize = 3 * image.width;
+
+                sws = sws_getContext(in_frame->width, in_frame->height, in_frame->format, vflip.width, vflip.height, AV_PIX_FMT_RGB24, SWS_FAST_BILINEAR, NULL, NULL, NULL);
+                sws_scale(sws, (void *)(in_frame->data), in_frame->linesize, 0, in_frame->height, (void *)(&vflip.pixels), &vflip_linesize);
+                sws_freeContext(sws);
+
+                vflip_pixels = vflip.pixels;
+                vflip_pixels += vflip_linesize * (vflip.height - 1);
+                vflip_linesize = -vflip_linesize;
+
+                sws = sws_getContext(vflip.width, vflip.height, AV_PIX_FMT_RGB24, image.width, image.height, AV_PIX_FMT_RGB24, SWS_FAST_BILINEAR, NULL, NULL, NULL);
+                sws_scale(sws, (void *)(&vflip_pixels), &vflip_linesize, 0, vflip.height, (void *)(&image.pixels), &image_linesize);
+                sws_freeContext(sws);
+
+                glTextureSubImage2D(vflip.tex, 0, 0, 0, vflip.width, vflip.height, GL_RGB, GL_UNSIGNED_BYTE, vflip.pixels);
+                glTextureSubImage2D(image.tex, 0, 0, 0, image.width, image.height, GL_RGB, GL_UNSIGNED_BYTE, image.pixels);
+                av_packet_unref(in_packet);
                 return;
             }
 
-            glTextureSubImage2D(image.tex, 0, 0, 0, image.width, image.height, GL_RGB, GL_UNSIGNED_BYTE, in_target->data[0]);
-            av_packet_unref(in_vpacket);
+            av_packet_unref(in_packet);
+        }
+    }
+}
+
+static void init_output(const char *restrict filename)
+{
+    int errnum, cid;
+    char str[1024] = { 0 };
+    AVStream *ostream = NULL;
+
+    if(!filename || !filename[0]) {
+        info("no output specified");
+        return;
+    }
+
+    errnum = avformat_alloc_output_context2(&out_format, NULL, NULL, filename);
+
+    if(errnum < 0) {
+        av_strerror(errnum, str, sizeof(str));
+        error("%s: %s", filename, str);
+        abort();
+    }
+
+    ostream = avformat_new_stream(out_format, NULL);
+
+    if(!ostream) {
+        error("%s: AVStream allocation failed", filename);
+        abort();
+    }
+
+    cid = av_guess_codec(out_format->oformat, NULL, filename, NULL, AVMEDIA_TYPE_VIDEO);
+    out_encoder = avcodec_find_encoder(cid);
+
+    if(!out_encoder) {
+        error("%s: AVCodec lookup [%d] failed", filename, cid);
+        abort();
+    }
+
+    out_context = avcodec_alloc_context3(out_encoder);
+
+    if(!out_context) {
+        error("%s: AVCodecContext allocation failed", filename);
+        abort();
+    }
+
+    if(in_context) {
+        //out_context->bit_rate = 1280000;
+        out_context->gop_size = in_context->gop_size;
+        out_context->max_b_frames = in_context->max_b_frames;
+
+        out_context->framerate = av_guess_frame_rate(in_format, in_format->streams[in_stream_id], NULL);
+        out_context->time_base.den = out_context->framerate.num;
+        out_context->time_base.num = out_context->framerate.den;
+    }
+    else {
+        //out_context->bit_rate = 1280000;
+        out_context->gop_size = 30;
+        out_context->max_b_frames = 1;
+    }
+
+    if((out_context->time_base.den == 0) || (out_context->time_base.num == 0)) {
+        out_context->time_base = ((AVRational){1, 60});
+        out_context->framerate = ((AVRational){60, 1});
+    }
+
+    if(out_encoder->pix_fmts)
+        out_context->pix_fmt = out_encoder->pix_fmts[0];
+    else out_context->pix_fmt = AV_PIX_FMT_YUV420P;
+
+    out_context->width = frame.width;
+    out_context->height = frame.height;
+    out_context->strict_std_compliance = FF_COMPLIANCE_UNOFFICIAL;
+
+    switch(out_context->pix_fmt) {
+        case AV_PIX_FMT_YUVJ420P:
+            out_context->pix_fmt = AV_PIX_FMT_YUV420P;
+            break;
+        case AV_PIX_FMT_YUVJ422P:
+            out_context->pix_fmt = AV_PIX_FMT_YUV422P;
+            break;
+        case AV_PIX_FMT_YUVJ444P:
+            out_context->pix_fmt = AV_PIX_FMT_YUV444P;
+            break;
+        case AV_PIX_FMT_YUVJ440P:
+            out_context->pix_fmt = AV_PIX_FMT_YUV440P;
+            break;
+        default:
+            break;
+    }
+
+    av_opt_set_double(out_context->priv_data, "crf", 0.0, 0);
+    av_opt_set(out_context->priv_data, "preset", "slow", 0);
+
+    errnum = avcodec_open2(out_context, out_encoder, NULL);
+
+    if(errnum < 0) {
+        av_strerror(errnum, str, sizeof(str));
+        error("%s: codec: %s", filename, str);
+        abort();
+    }
+
+    out_params = ostream->codecpar;
+    errnum = avcodec_parameters_from_context(out_params, out_context);
+
+    if(errnum < 0) {
+        av_strerror(errnum, str, sizeof(str));
+        error("%s: codecpar: %s", filename, str);
+        abort();
+    }
+
+    if(!(out_format->oformat->flags & AVFMT_NOFILE)) {
+        errnum = avio_open(&out_format->pb, filename, AVIO_FLAG_WRITE);
+
+        if(errnum < 0) {
+            av_strerror(errnum, str, sizeof(str));
+            error("%s: avio: %s", filename, str);
+            abort();
+        }
+    }
+
+    errnum = avformat_write_header(out_format, NULL);
+
+    if(errnum < 0) {
+        av_strerror(errnum, str, sizeof(str));
+        error("%s: header: %s", filename, str);
+        abort();
+    }
+
+    out_packet = av_packet_alloc();
+    out_frame = av_frame_alloc();
+
+    out_frame->width = out_context->width;
+    out_frame->height = out_context->height;
+    out_frame->format = out_context->pix_fmt;
+
+    errnum = av_frame_get_buffer(out_frame, 1);
+
+    if(errnum < 0) {
+        av_strerror(errnum, str, sizeof(str));
+        error("%s: frame: %s", filename, str);
+        abort();
+    }
+}
+
+static void close_output(void)
+{
+    if(out_format) {
+        av_write_trailer(out_format);
+
+        av_frame_free(&out_frame);
+        av_packet_free(&out_packet);
+
+        avformat_close_input(&out_format);
+        avcodec_free_context(&out_context);
+    }
+}
+
+static void process_output_video(void)
+{
+    char str[1024];
+    int linesize = 3 * frame.width;
+    int response;
+    struct SwsContext *sws;
+    unsigned char *pixptr;
+
+    if((maxframe != ULONG_MAX) && (framenum >= maxframe)) {
+        close_output();
+        return;
+    }
+
+    if(out_format) {
+        av_frame_make_writable(out_frame);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, frame.fbo);
+        glReadPixels(0, 0, frame.width, frame.height, GL_RGB, GL_UNSIGNED_BYTE, frame.pixels);
+
+        pixptr = frame.pixels;
+        pixptr += linesize * (frame.height - 1);
+        linesize = -linesize;
+
+        sws = sws_getContext(frame.width, frame.height, AV_PIX_FMT_RGB24, out_frame->width, out_frame->height, out_frame->format, SWS_FAST_BILINEAR, NULL, NULL, NULL);
+        sws_scale(sws, (void *)(&pixptr), &linesize, 0, frame.height, out_frame->data, out_frame->linesize);
+        sws_freeContext(sws);
+
+        out_frame->pts = framenum;
+
+        response = avcodec_send_frame(out_context, out_frame);
+
+        if(response < 0) {
+            av_strerror(response, str, sizeof(str));
+            warn("[1] output: video: %s", str);
+            close_output();
             return;
         }
 
-        av_packet_unref(in_vpacket);
+        while(response >= 0) {
+            response = avcodec_receive_packet(out_context, out_packet);
+
+            if(response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
+                av_packet_unref(out_packet);
+                break;
+            }
+
+            if(response < 0) {
+                av_strerror(response, str, sizeof(str));
+                warn("[2] output: video: %s", str);
+                close_output();
+                return;
+            }
+
+            av_packet_rescale_ts(out_packet, out_context->time_base, out_format->streams[0]->time_base);
+
+            response = av_interleaved_write_frame(out_format, out_packet);
+
+            if(response) {
+                av_strerror(response, str, sizeof(str));
+                warn("[3] output: video: %s", str);
+                close_output();
+                return;
+            }
+
+            av_packet_unref(out_packet);
+        }
     }
 }
 
 static void on_glfw_error(int code, const char *restrict message)
 {
-    error("glfw: error[%d]: %s", code, message);
+    (error)("glfw: error[%d]: %s", code, message);
 }
 
 static void on_framebuffer_size(GLFWwindow *window, int width, int height)
 {
     unused_argument(window);
-
-    if(frame.tex) {
-        glDeleteTextures(1, &frame.tex);
-        glDeleteFramebuffers(1, &frame.fbo);
-    }
-
-    free(frame.pixels);
-
-    frame.width = width;
-    frame.height = height;
-    frame.pixels = malloc_safe(3 * width * height);
-
-    glCreateTextures(GL_TEXTURE_2D, 1, &frame.tex);
-    glTextureStorage2D(frame.tex, 1, GL_RGBA32F, frame.width, frame.height);
-    glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(frame.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(frame.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-    glCreateFramebuffers(1, &frame.fbo);
-    glNamedFramebufferTexture(frame.fbo, GL_COLOR_ATTACHMENT0, frame.tex, 0);
-
-    if(in_target)
-        av_frame_free(&in_target);
-    in_target = av_frame_alloc();
-
-    av_image_alloc(in_target->data, in_target->linesize, width, height, AV_PIX_FMT_RGB24, 1);
-    in_target->width = width;
-    in_target->height = height;
-    in_target->format = AV_PIX_FMT_RGB24;
+    unused_argument(width);
+    unused_argument(height);
 }
 
 static void on_key(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -730,34 +962,28 @@ static void on_key(GLFWwindow *window, int key, int scancode, int action, int mo
 
 static void usage(void)
 {
-    /*
-    
-    riteg -o radiosonde_vhs.mp4 -Q 15 -s 640:480 json/vhs.v5.json radiosonde.mp4
-    riteg -o fx.mp4 -Q 15 -s 640:480 -f 30 -c 300 json/vhs.v5.json media/vhs43_SMPTE.png
-
-    */
-   fprintf(stderr, "usage: UNDEFINED YET\n");
-    /*
-    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] <pipeline> [paths...]\n");
+    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] 1<pipeline> [paths...]\n");
     fprintf(stderr, "options:\n");
     fprintf(stderr, "   -h          : print this message and exit\n");
-    fprintf(stderr, "   -o <path>   : specify output path. {} is substituted to frame index.\n");
-    fprintf(stderr, "   -s <w>:<h>  : specify window size (makes the window non-resizable).\n");
+    fprintf(stderr, "   -o <path>   : specify output path. FFmpeg path formatting works.\n");
+    fprintf(stderr, "   -s <w>:<h>  : specify rendering frame size.\n");
     fprintf(stderr, "   -f <fps>    : specify fixed framerate (frametime = 1 / FPS).\n");
     fprintf(stderr, "   -c <count>  : specify maximum amount of frames to export.\n");
-    */
 }
 
 int main(int argc, char **argv)
 {
     int c;
     size_t i;
-    int resizable = GLFW_TRUE;
+    int fbw, fbh;
     const char *pipeline_path;
+    char output_path[BUFSIZ] = { 0 };
     GLFWwindow *window;
 
     frame.width = -1;
     frame.height = -1;
+    maxframe = ULONG_MAX;
+    framerate = 0UL;
 
     while((c = getopt(argc, argv, "ho:s:f:c:")) != -1) {
         switch(c) {
@@ -765,11 +991,16 @@ int main(int argc, char **argv)
                 usage();
                 return 0;
             case 'o':
-                /* batch = make_pathfmt(output_fmt, sizeof(output_fmt), optarg); */
+                kstrncpy(output_path, optarg, sizeof(output_path));
                 break;
             case 's':
                 sscanf(optarg, "%d:%d", &frame.width, &frame.height);
-                resizable = GLFW_FALSE;
+                break;
+            case 'f':
+                framerate = strtoul(optarg, NULL, 10);
+                break;
+            case 'c':
+                maxframe = strtoul(optarg, NULL, 10);
                 break;
             default:
                 error("unrecognized option: %c", c);
@@ -795,9 +1026,6 @@ int main(int argc, char **argv)
         info("window height is too small, setting to %d", frame.height);
     }
 
-    info("size: %dx%d", frame.width, frame.height);
-    info("resizable: %s", resizable ? "yes" : "no");
-
     glfwSetErrorCallback(&on_glfw_error);
 
     if(!glfwInit()) {
@@ -805,7 +1033,7 @@ int main(int argc, char **argv)
         abort();
     }
 
-    glfwWindowHint(GLFW_RESIZABLE, resizable);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -838,9 +1066,36 @@ int main(int argc, char **argv)
     stbi_set_flip_vertically_on_load(1);
     stbi_flip_vertically_on_write(1);
 
+    load_input(argv[optind++]);
+    init_output(output_path);
+
+    image.width = 1 << av_log2(in_format ? in_context->width : frame.width);
+    image.height = 1 << av_log2(in_format ? in_context->height : frame.height);
+    image.pixels = malloc_safe(3 * image.width * image.height);
+
+    vflip.width = image.width;
+    vflip.height = image.height;
+    vflip.pixels = malloc_safe(3 * vflip.width * vflip.height);
+
+    frame.pixels = malloc_safe(3 * frame.width * frame.height);
+
     blank.width = 16;
     blank.height = 16;
     blank.pixels = NULL;
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &image.tex);
+    glTextureStorage2D(image.tex, 1, GL_RGBA32F, image.width, image.height);
+    glTextureParameteri(image.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(image.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(image.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(image.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &vflip.tex);
+    glTextureStorage2D(vflip.tex, 1, GL_RGBA32F, vflip.width, vflip.height);
+    glTextureParameteri(vflip.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(vflip.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(vflip.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(vflip.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &blank.tex);
     glTextureStorage2D(blank.tex, 1, GL_RGBA16F, blank.width, blank.height);
@@ -848,6 +1103,16 @@ int main(int argc, char **argv)
     glTextureParameteri(blank.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTextureParameteri(blank.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(blank.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &frame.tex);
+    glTextureStorage2D(frame.tex, 1, GL_RGBA32F, frame.width, frame.height);
+    glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(frame.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(frame.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(frame.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glCreateFramebuffers(1, &frame.fbo);
+    glNamedFramebufferTexture(frame.fbo, GL_COLOR_ATTACHMENT0, frame.tex, 0);
 
     glCreateFramebuffers(1, &blank.fbo);
     glNamedFramebufferTexture(blank.fbo, GL_COLOR_ATTACHMENT0, blank.tex, 0);
@@ -857,20 +1122,9 @@ int main(int argc, char **argv)
     glClear(GL_COLOR_BUFFER_BIT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    image.width = frame.width;
-    image.height = frame.height;
-
-    glCreateTextures(GL_TEXTURE_2D, 1, &image.tex);
-    glTextureStorage2D(image.tex, 1, GL_RGBA16F, image.width, image.height);
-    glTextureParameteri(image.tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(image.tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(image.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(image.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-    load_input(argv[optind]);
-
     curtime = glfwGetTime();
     lasttime = curtime - 0.16f;
+    framenum = 0UL;
 
     while(!glfwWindowShouldClose(window)) {
         process_input();
@@ -885,16 +1139,23 @@ int main(int argc, char **argv)
 
         for(i = 0; i < num_passes; draw_pass(&passes[i++]));
 
+        glfwGetFramebufferSize(window, &fbw, &fbh);
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, frame.width, frame.height);
+        glViewport(0, 0, fbw, fbh);
 
         glBlitNamedFramebuffer(blit->fbo, frame.fbo, 0, 0, blit->width, blit->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-        glBlitNamedFramebuffer(blit->fbo, 0, 0, 0, blit->width, blit->height, 0, 0, frame.width, frame.height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBlitNamedFramebuffer(blit->fbo, 0, 0, 0, blit->width, blit->height, 0, 0, fbw, fbh, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+        process_output_video();
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        framenum += 1UL;
     }
 
+    close_output();
     unload_input();
 
     for(i = 0; i < num_passes; ++i) {
@@ -915,13 +1176,17 @@ int main(int argc, char **argv)
     glDeleteBuffers(1, &ubo);
     glDeleteShader(vert);
 
+    glDeleteFramebuffers(1, &blank.fbo);
     glDeleteFramebuffers(1, &frame.fbo);
 
-    glDeleteTextures(1, &image.tex);
     glDeleteTextures(1, &blank.tex);
     glDeleteTextures(1, &frame.tex);
+    glDeleteTextures(1, &vflip.tex);
+    glDeleteTextures(1, &image.tex);
 
     free(frame.pixels);
+    free(vflip.pixels);
+    free(image.pixels);
 
     glfwDestroyWindow(window);
     glfwTerminate();

@@ -1,7 +1,6 @@
 {
   "textures": {
     "dropout":          { "width": 320, "height": 240, "filter": true },
-    "vflip":            { "width": 640, "height": 480, "filter": true },
     "gamma":            { "width": 640, "height": 240, "filter": true },
     "yiq":              { "width": 640, "height": 240, "filter": true },
     "signal":           { "width": 640, "height": 240, "filter": true },
@@ -17,17 +16,11 @@
       "shader": "shaders/vhs_dropout.frag",
       "samplers": [],
       "output": "dropout",
-      "params": [0.0005, 0.001, 20, 0.0, 0.0, 4.0, 1.0]
-    },
-    {
-      "shader": "shaders/video_vflip.frag",
-      "samplers": ["!image"],
-      "output": "vflip",
-      "params": []
+      "params": [0.00025, 0.001, 20, 0.0, 0.0, 4.0, 8.0]
     },
     {
       "shader": "shaders/video_gamma.frag",
-      "samplers": ["vflip"],
+      "samplers": ["!image"],
       "output": "gamma",
       "params": [0.8]
     },
@@ -53,7 +46,7 @@
       "shader": "shaders/ntsc_snow.frag",
       "samplers": ["dropout_combine"],
       "output": "snow",
-      "params": [1.0, 0.0625]
+      "params": [0.25, 0.0625]
     },
     {
       "shader": "shaders/ntsc_demodulate.frag",
