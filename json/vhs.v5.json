@@ -1,19 +1,19 @@
 {
   "textures": {
-    "gamma":              { "width": 640, "height": 240, "filter": true },
-    "cutoff":             { "width": 640, "height": 240, "filter": true },
-    "yiq":                { "width": 640, "height": 240, "filter": true },
-    "luminance_lp_a":     { "width": 640, "height": 240, "filter": true },
-    "luminance_lp_b":     { "width": 640, "height": 240, "filter": true },
-    "luminance":          { "width": 640, "height": 240, "filter": true },
-    "chrominance_noise":  { "width": 640, "height": 240, "filter": true },
-    "chrominance_lp":     { "width": 640, "height": 240, "filter": true },
-    "chrominance":        { "width": 640, "height": 240, "filter": true },
-    "yiq_swizzle":        { "width": 640, "height": 240, "filter": true },
-    "dropout":            { "width": 640, "height": 240, "filter": true },
-    "headswitch":         { "width": 640, "height": 240, "filter": true },
-    "tracking":           { "width": 640, "height": 240, "filter": true },
-    "result":             { "width": 640, "height": 240, "filter": true }
+    "gamma":              { "width": 640, "height": 480, "filter": true },
+    "cutoff":             { "width": 640, "height": 480, "filter": true },
+    "yiq":                { "width": 640, "height": 480, "filter": true },
+    "luminance_lp_a":     { "width": 640, "height": 480, "filter": true },
+    "luminance_lp_b":     { "width": 640, "height": 480, "filter": true },
+    "luminance":          { "width": 640, "height": 480, "filter": true },
+    "chrominance_noise":  { "width": 640, "height": 480, "filter": true },
+    "chrominance_lp":     { "width": 640, "height": 480, "filter": true },
+    "chrominance":        { "width": 640, "height": 480, "filter": true },
+    "yiq_swizzle":        { "width": 640, "height": 480, "filter": true },
+    "dropout":            { "width": 640, "height": 480, "filter": true },
+    "headswitch":         { "width": 640, "height": 480, "filter": true },
+    "tracking":           { "width": 640, "height": 480, "filter": true },
+    "result":             { "width": 640, "height": 480, "filter": true }
   },
   "blit": "result",
   "passes": [
@@ -39,13 +39,13 @@
       "shader": "shaders/fir_lowpass.frag",
       "samplers": ["yiq"],
       "output": "luminance_lp_a",
-      "params": [16, 0.50, 1.0]
+      "params": [16, 0.5203125, 1.0]
     },
     {
       "shader": "shaders/fir_lowpass.frag",
       "samplers": ["yiq"],
       "output": "luminance_lp_b",
-      "params": [64, 0.25, 1.0]
+      "params": [64, 0.26015625, 1.0]
     },
     {
       "shader": "shaders/subtract.frag",
@@ -63,7 +63,7 @@
       "shader": "shaders/fir_lowpass.frag",
       "samplers": ["chrominance_noise"],
       "output": "chrominance_lp",
-      "params": [128, 0.1, 1.0]
+      "params": [128, 0.0625, 1.0]
     },
     {
       "shader": "shaders/blur_gaussian_13.frag",
@@ -93,7 +93,7 @@
       "shader": "shaders/vhs_tracking.frag",
       "samplers": ["headswitch"],
       "output": "tracking",
-      "params": [70, 2.0, 4]
+      "params": [70, 2.0, 0.5]
     },
     {
       "shader": "shaders/color_yiq_to_rgb.frag",

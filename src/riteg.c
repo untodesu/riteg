@@ -801,8 +801,8 @@ static void init_output(const char *restrict filename)
             break;
     }
 
-    av_opt_set_double(out_context->priv_data, "crf", 0.0, 0);
-    av_opt_set(out_context->priv_data, "preset", "slow", 0);
+    av_opt_set_double(out_context->priv_data, "qp", 0.0, 0);
+    av_opt_set(out_context->priv_data, "preset", "ultrafast", 0);
 
     errnum = avcodec_open2(out_context, out_encoder, NULL);
 
