@@ -12,6 +12,8 @@ layout(binding = 0, std140) uniform params {
     vec4 timing;
 };
 
+layout(binding = 0) uniform sampler2D image;
+
 uint hash(uint x)
 {
     x ^= x >> 0x010U;
@@ -33,12 +35,34 @@ float rand(float x, float y)
 
 void main(void)
 {
+    /* https://www.desmos.com/calculator/croqc9jxlt */
+    const float texp = param_a.y * exp(-5.0 * param_a.z * uv.y * uv.y);
+    const float thres = max(param_a.x - texp, 0.0);
+    const float steps = param_a.w;
+
+    float dvalue = 0.0;
+    for(float i = 1.0; i <= steps; i += 1.0) {
+        if(rand(uv.x + i / screen.x, uv.y) >= thres)
+            dvalue = 0.0;
+        else dvalue += 1.0;
+    }
+
+    const float noise = rand(uv.x, uv.y);
+    const float nvalue = noise * (steps - dvalue) / steps;
+    const vec4 color = texture(image, uv);
+
+    target.x = mix(color.x, 1.0, nvalue);
+    target.y = mix(color.y, 0.0, nvalue);
+    target.z = mix(color.z, 0.0, nvalue);
+    target.w = color.w;
+
+/*
     const float fx = rand(uv.x, uv.y);
     const float fy = rand(fx, uv.y);
     const float fz = rand(fx, uv.y);
     const float pixel = 1.0 / screen.x;
 
-    /* https://www.desmos.com/calculator/ff4qu2gf5w */
+    /* https://www.desmos.com/calculator/ff4qu2gf5w
     const float paxmap = 1.0 - param_a.x * 0.01;
     const float thx = param_a.z * (uv.y - 0.01 * param_a.w);
     const float thres = paxmap - 0.01 * param_a.y * thx * exp(1.0 - thx);
@@ -64,5 +88,6 @@ void main(void)
     target.x = noise;
     target.y = imod;
     target.z = qmod;
-    target.w = 1.0;
+    target.w = 1.0
+*/
 }
