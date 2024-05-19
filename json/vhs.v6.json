@@ -1,0 +1,71 @@
+{
+  "textures": {
+    "image_ds":       { "width": 1280, "height": 240, "filter": true },
+    "image_cutoff":   { "width": 1280, "height": 240, "filter": true },
+    "image_yiq":      { "width": 1280, "height": 240, "filter": true },
+    "luminance":      { "width": 1280, "height": 240, "filter": true },
+    "chrominance":    { "width": 1280, "height": 240, "filter": true },
+    "composite":      { "width": 1280, "height": 240, "filter": true },
+    "dropout":        { "width": 1280, "height": 240, "filter": true },
+    "headswitch":     { "width": 1280, "height": 240, "filter": true },
+    "result_yiq":     { "width": 1280, "height": 240, "filter": true },
+    "result":         { "width": 1280, "height": 240, "filter": true }
+  },
+  "blit": "result",
+  "passes": [
+    {
+      "shader": "shaders/mix_copy.frag",
+      "samplers": ["!image"],
+      "output": "image_ds",
+      "params": []
+    },
+    {
+      "shader": "shaders/vhs_cutoff.frag",
+      "samplers": ["image_ds"],
+      "output": "image_cutoff",
+      "params": [0.005, 0.010]
+    },
+    {
+      "shader": "shaders/color_rgb_to_yiq.frag",
+      "samplers": ["image_cutoff"],
+      "output": "image_yiq",
+      "params": []
+    },
+    {
+      "shader": "shaders/blur_lowpass.frag",
+      "samplers": ["image_yiq"],
+      "output": "luminance",
+      "params": [96, 0.125, 1.0]
+    },
+    {
+      "shader": "shaders/blur_lowpass.frag",
+      "samplers": ["image_yiq"],
+      "output": "chrominance",
+      "params": [96, 0.03125, 2.5]
+    },
+    {
+      "shader": "shaders/swizzle_yiq.frag",
+      "samplers": ["luminance", "chrominance"],
+      "output": "composite",
+      "params": []
+    },
+    {
+      "shader": "shaders/vhs_dropout.frag",
+      "samplers": ["composite"],
+      "output": "dropout",
+      "params": [0.9999999, 0.00001, 50, 32]
+    },
+    {
+      "shader": "shaders/vhs_headswitch.frag",
+      "samplers": ["dropout"],
+      "output": "headswitch",
+      "params": [0.5, 25.0, 3.5, 0.0625]
+    },
+    {
+      "shader": "shaders/color_yiq_to_rgb.frag",
+      "samplers": ["headswitch"],
+      "output": "result",
+      "params": []
+    }
+  ]
+}

@@ -1,19 +1,19 @@
 {
   "textures": {
-    "gamma":              { "width": 640, "height": 480, "filter": true },
-    "cutoff":             { "width": 640, "height": 480, "filter": true },
-    "yiq":                { "width": 640, "height": 480, "filter": true },
-    "luminance_lp_a":     { "width": 640, "height": 480, "filter": true },
-    "luminance_lp_b":     { "width": 640, "height": 480, "filter": true },
-    "luminance":          { "width": 640, "height": 480, "filter": true },
-    "chrominance_noise":  { "width": 640, "height": 480, "filter": true },
-    "chrominance_lp":     { "width": 640, "height": 480, "filter": true },
-    "chrominance":        { "width": 640, "height": 480, "filter": true },
-    "yiq_swizzle":        { "width": 640, "height": 480, "filter": true },
-    "dropout":            { "width": 640, "height": 480, "filter": true },
-    "headswitch":         { "width": 640, "height": 480, "filter": true },
-    "tracking":           { "width": 640, "height": 480, "filter": true },
-    "result":             { "width": 640, "height": 480, "filter": true }
+    "gamma":              { "width": 640, "height": 240, "filter": true },
+    "cutoff":             { "width": 640, "height": 240, "filter": true },
+    "yiq":                { "width": 640, "height": 240, "filter": true },
+    "luminance_lp_a":     { "width": 640, "height": 240, "filter": true },
+    "luminance_lp_b":     { "width": 640, "height": 240, "filter": true },
+    "luminance":          { "width": 640, "height": 240, "filter": true },
+    "chrominance_noise":  { "width": 640, "height": 240, "filter": true },
+    "chrominance_lp":     { "width": 640, "height": 240, "filter": true },
+    "chrominance":        { "width": 640, "height": 240, "filter": true },
+    "yiq_swizzle":        { "width": 640, "height": 240, "filter": true },
+    "dropout":            { "width": 640, "height": 240, "filter": true },
+    "headswitch":         { "width": 640, "height": 240, "filter": true },
+    "tracking":           { "width": 640, "height": 240, "filter": true },
+    "result":             { "width": 640, "height": 240, "filter": true }
   },
   "blit": "result",
   "passes": [

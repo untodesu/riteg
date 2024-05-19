@@ -35,33 +35,23 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float pixel = 1.0 / screen.x;
-    const float noise = rand(0.0, uv.y);
-    const float thres = param_a.x / screen.y;
+    const float timemod = mod(timing.y * 0.03125, 1.0);
+    const float tval = 0.125;
 
-    if(uv.y <= thres) {
-        const vec2 uvmod = vec2(uv.x + param_a.y * uv.y - param_a.z, uv.y);
+    if(uv.y <= param_a.x) {
+        const float amount = 1.0 / exp((param_a.x - uv.y) * 10.0 * param_a.y + param_a.z);
+        const float kjig = 1.0 / exp((param_a.x - uv.y) * param_a.y + param_a.z - 0.5);
 
-        if(uvmod.x >= 0.0 && uvmod.x <= 1.0 && uvmod.y >= 0.0 && uvmod.y <= 1.0) {
-            const vec4 color = texture(image, uvmod);
-            target.x = color.x;
-            target.y = color.y * noise;
-            target.z = color.z * noise;
-            target.w = color.w;
-        }
-        else {
-            target.x = 0.0;
-            target.y = 0.0;
-            target.z = 0.0;
-            target.w = 1.0;
-        }
+        const float jiggle = param_a.w * kjig * rand(0.0, uv.y);
+        const vec2 uvmod = vec2(uv.x - amount + jiggle, uv.y);
+
+        if((uvmod.x < 0.0) || (uvmod.x > 1.0))
+            target = vec4(0.0, 0.0, 0.0, 1.0);
+        else target = texture(image, uvmod);
+
+        target.yz *= 1.0 - 25.0 * kjig;
     }
     else {
-        const vec2 uvmod = vec2(uv.x - param_a.w * pixel * noise, uv.y);
-        const vec4 color = texture(image, uvmod);
-        target.x = color.x;
-        target.y = color.y;
-        target.z = color.z;
-        target.w = color.w;
+        target = texture(image, uv);
     }
 }
