@@ -29,7 +29,7 @@
       "shader": "shaders/video_gamma.frag",
       "samplers": ["downsample"],
       "output": "gamma",
-      "params": [2.2]
+      "params": [1.8]
     },
     {
       "shader": "shaders/color_rgb_to_yiq.frag",
@@ -41,19 +41,19 @@
       "shader": "shaders/ccd_lowrange.frag",
       "samplers": ["yiq"],
       "output": "lowrange",
-      "params": [0.25, 0.995]
+      "params": [0.25, 1.0]
     },
     {
       "shader": "shaders/ccd_burnin.frag",
       "samplers": ["lowrange", "burnin_store"],
       "output": "burnin",
-      "params": [0.995, 0.75]
+      "params": [0.998, 0.75]
     },
     {
       "shader": "shaders/blur_gaussian_13.frag",
       "samplers": ["burnin"],
       "output": "burnin_store",
-      "params": [0.25, 0.25]
+      "params": [1.0, 1.0]
     },
     {
       "shader": "shaders/mix_add.frag",
