@@ -35,9 +35,6 @@ float rand(float x, float y)
 
 void main(void)
 {
-    const float timemod = mod(timing.y * 0.03125, 1.0);
-    const float tval = 0.125;
-
     if(uv.y <= param_a.x) {
         const float amount = 1.0 / exp((param_a.x - uv.y) * 10.0 * param_a.y + param_a.z);
         const float kjig = 1.0 / exp((param_a.x - uv.y) * param_a.y + param_a.z - 0.5);
