@@ -47,47 +47,22 @@ void main(void)
         else dvalue += 1.0;
     }
 
-    const float noise = rand(uv.x, uv.y);
-    const float nvalue = noise * (steps - dvalue) / steps;
     const vec4 color = texture(image, uv);
+    const float noise = rand(uv.x, uv.y);
+    const float linoise = rand(0.0, uv.y);
+    const float linthres = param_b.x;
 
-    target.x = mix(color.x, 1.0, nvalue);
+    float nvalue = noise * (steps - dvalue) / steps * 2.0;
+
+    if(linoise >= linthres) {
+        nvalue = 1.0 - nvalue;
+        nvalue += rand(uv.x, 0.0);
+    }
+
+    if(color.x >= 0.5)
+        target.x = mix(color.x, 0.0, nvalue);
+    else target.x = mix(color.x, 1.0, nvalue);
     target.y = mix(color.y, 0.0, nvalue);
     target.z = mix(color.z, 0.0, nvalue);
     target.w = color.w;
-
-/*
-    const float fx = rand(uv.x, uv.y);
-    const float fy = rand(fx, uv.y);
-    const float fz = rand(fx, uv.y);
-    const float pixel = 1.0 / screen.x;
-
-    /* https://www.desmos.com/calculator/ff4qu2gf5w
-    const float paxmap = 1.0 - param_a.x * 0.01;
-    const float thx = param_a.z * (uv.y - 0.01 * param_a.w);
-    const float thres = paxmap - 0.01 * param_a.y * thx * exp(1.0 - thx);
-    const float steps = (1.0 - thres) * param_b.y + ceil(param_b.z * fx);
-
-    float noise = 0.0;
-    for(float i = 1.0; i <= steps; i += 1.0)
-        noise += step(thres, rand(uv.x + i * pixel, uv.y)) * i;
-    noise = clamp(noise / steps, 0.0, 1.0);
-
-    const float linoise = rand(sin(noise), uv.y);
-    const float linthres = 1.0 - param_b.x * 0.01;
-
-    if(linoise >= linthres) {
-        noise = 1.0 - noise;
-        noise *= rand(uv.x, linoise);
-    }
-
-    const float ymod = 0.5 * rand(uv.y, noise);
-    const float imod = ymod * (2.0 * fy - 1.0);
-    const float qmod = ymod * (2.0 * fx - 1.0);
-
-    target.x = noise;
-    target.y = imod;
-    target.z = qmod;
-    target.w = 1.0
-*/
 }

@@ -4,8 +4,11 @@
     "gamma":          { "width": 1280, "height": 480, "filter": true },
     "cutoff":         { "width": 1280, "height": 480, "filter": true },
     "yiq":            { "width": 1280, "height": 480, "filter": true },
+    "luminance_lp_a": { "width": 1280, "height": 480, "filter": true },
+    "luminance_lp_b": { "width": 1280, "height": 480, "filter": true },
     "luminance":      { "width": 1280, "height": 480, "filter": true },
     "color_noise":    { "width": 1280, "height": 480, "filter": true },
+    "color_lowpass":  { "width": 1280, "height": 480, "filter": true },
     "chrominance":    { "width": 1280, "height": 480, "filter": true },
     "swizzle":        { "width": 1280, "height": 480, "filter": true },
     "sharpen":        { "width": 1280, "height": 480, "filter": true },
@@ -36,7 +39,7 @@
       "shader": "shaders/vhs_cutoff.frag",
       "samplers": ["gamma"],
       "output": "cutoff",
-      "params": [0.005, 0.010]
+      "params": [0.01]
     },
     {
       "shader": "shaders/color_rgb_to_yiq.frag",
@@ -47,8 +50,20 @@
     {
       "shader": "shaders/blur_lowpass.frag",
       "samplers": ["yiq"],
+      "output": "luminance_lp_a",
+      "params": [64, 0.285, 1.0]
+    },
+    {
+      "shader": "shaders/blur_gaussian_13.frag",
+      "samplers": ["luminance_lp_a"],
+      "output": "luminance_lp_b",
+      "params": [4.0, 0.0]
+    },
+    {
+      "shader": "shaders/mix_subtract.frag",
+      "samplers": ["luminance_lp_a", "luminance_lp_b"],
       "output": "luminance",
-      "params": [32, 0.25, 1.0]
+      "params": [2.0, 1.0]
     },
     {
       "shader": "shaders/vhs_color_noise.frag",
@@ -58,9 +73,15 @@
     },
     {
       "shader": "shaders/blur_lowpass.frag",
-      "samplers": ["color_noise"],
+      "samplers": ["yiq"],
+      "output": "color_lowpass",
+      "params": [128, 0.025, 1]
+    },
+    {
+      "shader": "shaders/vhs_color_amplify.frag",
+      "samplers": ["color_lowpass"],
       "output": "chrominance",
-      "params": [64, 0.05, 2.5]
+      "params": [0.75, 0.1, 2.0]
     },
     {
       "shader": "shaders/swizzle_yiq.frag",
@@ -78,19 +99,19 @@
       "shader": "shaders/vhs_dropout.frag",
       "samplers": ["sharpen"],
       "output": "dropout",
-      "params": [0.9999999, 0.00001, 50, 32]
+      "params": [0.9999999, 0.000001, 50, 48, 0.999999]
     },
     {
       "shader": "shaders/vhs_headswitch.frag",
       "samplers": ["dropout"],
       "output": "headswitch",
-      "params": [0.00625, 30.0, 3, 0.0625]
+      "params": [0.003125, 30.0, 3, 0.0625]
     },
     {
       "shader": "shaders/vhs_tracking.frag",
       "samplers": ["headswitch"],
       "output": "tracking",
-      "params": [70, 8.0, 0.5]
+      "params": [70, 2.0, 0.125]
     },
     {
       "shader": "shaders/ntsc_modulate.frag",
@@ -114,7 +135,7 @@
       "shader": "shaders/ntsc_postprocess.frag",
       "samplers": ["demodulate"],
       "output": "postprocess",
-      "params": [1.0, 5.0]
+      "params": [1.0, 2.5]
     },
     {
       "shader": "shaders/color_yiq_to_rgb.frag",

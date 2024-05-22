@@ -21,12 +21,6 @@ void main(void)
     const vec4 hcolor = param_a.y * texture(history, uv);
     
     if(color.x >= param_a.x)
-        target = color + hcolor;
+        target = hcolor + color;
     else target = hcolor;
-
-    // Clamp values to sensible ranges
-    target.x = clamp(target.x,  0.0, 1.0);
-    target.y = clamp(target.y, -1.0, 1.0);
-    target.z = clamp(target.z, -1.0, 1.0);
-    target.w = clamp(target.w,  0.0, 1.0);
 }

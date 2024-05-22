@@ -21,11 +21,29 @@ layout(binding = 0, std140) uniform params {
 
 layout(binding = 0) uniform sampler2D image;
 
+uint hash(uint x)
+{
+    x ^= x >> 0x010U;
+    x *= 0x7FEB352DU;
+    x ^= x >> 0x010U;
+    x *= 0x846CA68BU;
+    x ^= x >> 0x010U;
+    return x;
+}
+
+float rand(float x, float y)
+{
+    const uint px = uint(x * screen.x);
+    const uint py = uint(y * screen.y);
+    const uint pz = uint(timing.y * 1000.0);
+    const uint hv = hash(px + hash(py) + hash(pz));
+    return uintBitsToFloat(0x3F800000U | (hv >> 9)) - 1.0;
+}
+
 float modulate_qam(float fs, float carrier, float n, vec2 sig)
 {
     const float pi = atan(1.0) * 4.0;
-    const float shift = pi * uv.y * screen.y;
-    const float phase = 2.0 * pi * carrier * (n / fs) + shift;
+    const float phase = 2.0 * pi * (carrier * (n / fs) + rand(uv.y, 0.0));
     return dot(sig, vec2(cos(phase), sin(phase)));
 }
 

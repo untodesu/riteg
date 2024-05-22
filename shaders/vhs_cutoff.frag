@@ -16,7 +16,6 @@ layout(binding = 0) uniform sampler2D image;
 
 void main(void)
 {
-    const float ix = 1.0 - uv.x;
     const vec4 color = texture(image, uv);
-    target = color * smoothstep(param_a.x, param_a.y, ix);
+    target = color * step(param_a.x, 1.0 - uv.x);
 }
