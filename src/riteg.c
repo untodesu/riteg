@@ -633,7 +633,7 @@ static void unload_input(void)
     }
 }
 
-static void process_input(void)
+static int process_input(void)
 {
     int response;
     int vflip_linesize;
@@ -648,7 +648,7 @@ static void process_input(void)
 
             if(response == AVERROR_EOF) {
                 unload_input();
-                return;
+                return 0;
             }
 
             if(response < 0) {
@@ -667,7 +667,7 @@ static void process_input(void)
                 av_strerror(response, str, sizeof(str));
                 warn("video: %s", str);
                 unload_input();
-                return;
+                return 0;
             }
 
             while(response >= 0) {
@@ -683,7 +683,7 @@ static void process_input(void)
                     av_strerror(response, str, sizeof(str));
                     warn("video: %s", str);
                     unload_input();
-                    return;
+                    return 0;
                 }
 
                 vflip_linesize = 3 * vflip.width;
@@ -705,12 +705,16 @@ static void process_input(void)
                 glTextureSubImage2D(image.tex, 0, 0, 0, image.width, image.height, GL_RGB, GL_UNSIGNED_BYTE, image.pixels);
                 av_packet_unref(in_packet);
 
-                return;
+                return 1;
             }
 
             av_packet_unref(in_packet);
         }
+
+        return 1;
     }
+
+    return 0;
 }
 
 static void init_output(const char *restrict filename)
@@ -970,13 +974,14 @@ static void on_key(GLFWwindow *window, int key, int scancode, int action, int mo
 
 static void usage(void)
 {
-    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] <pipeline> [paths...]\n");
+    fprintf(stderr, "usage: riteg [-h] [-o <path>] [-s <w>:<h>] [-f <fps>] [-c <count>] [-Q] <pipeline> [paths...]\n");
     fprintf(stderr, "options:\n");
     fprintf(stderr, "   -h          : print this message and exit\n");
     fprintf(stderr, "   -o <path>   : specify output path. FFmpeg path formatting works.\n");
     fprintf(stderr, "   -s <w>:<h>  : specify rendering frame size.\n");
     fprintf(stderr, "   -f <fps>    : specify fixed framerate (frametime = 1 / FPS).\n");
     fprintf(stderr, "   -c <count>  : specify maximum amount of frames to export.\n");
+    fprintf(stderr, "   -Q          : quit as soon as input video feed ends\n");
 }
 
 int main(int argc, char **argv)
@@ -984,6 +989,7 @@ int main(int argc, char **argv)
     int c;
     size_t i;
     int fbw, fbh;
+    int quit_on_end;
     const char *pipeline_path;
     char output_path[BUFSIZ] = { 0 };
     GLFWwindow *window;
@@ -992,8 +998,9 @@ int main(int argc, char **argv)
     frame.height = -1;
     maxframe = ULONG_MAX;
     framerate = 0UL;
+    quit_on_end = 0;
 
-    while((c = getopt(argc, argv, "ho:s:f:c:")) != -1) {
+    while((c = getopt(argc, argv, "ho:s:f:c:Q")) != -1) {
         switch(c) {
             case 'h':
                 usage();
@@ -1009,6 +1016,9 @@ int main(int argc, char **argv)
                 break;
             case 'c':
                 maxframe = strtoul(optarg, NULL, 10);
+                break;
+            case 'Q':
+                quit_on_end = 1;
                 break;
             default:
                 error("unrecognized option: %c", c);
@@ -1132,7 +1142,22 @@ int main(int argc, char **argv)
     framenum = 0UL;
 
     while(!glfwWindowShouldClose(window)) {
-        process_input();
+        if(!process_input()) {
+            if(quit_on_end) {
+                if(maxframe != ULONG_MAX) {
+                    if(framenum >= maxframe) {
+                        glfwSetWindowShouldClose(window, GLFW_TRUE);
+                        /* Don't break here: we still need to process
+                        * the remaining frame that probably exists */
+                    }
+                }
+                else {
+                    glfwSetWindowShouldClose(window, GLFW_TRUE);
+                    /* Don't break here: we still need to process
+                    * the remaining frame that probably exists */
+                }
+            }
+        }
 
         curtime = glfwGetTime();
         frametime = curtime - lasttime;

@@ -33,7 +33,7 @@
       "shader": "shaders/video_gamma.frag",
       "samplers": ["downsample"],
       "output": "gamma",
-      "params": [0.9]
+      "params": [1.0]
     },
     {
       "shader": "shaders/vhs_cutoff.frag",
