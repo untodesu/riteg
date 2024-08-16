@@ -59,9 +59,7 @@ void main(void)
         nvalue += rand(uv.x, 0.0);
     }
 
-    if(color.x >= 0.5)
-        target.x = mix(color.x, 0.0, nvalue);
-    else target.x = mix(color.x, 1.0, nvalue);
+    target.x = mix(color.x, 1.0, nvalue);
     target.y = mix(color.y, 0.0, nvalue);
     target.z = mix(color.z, 0.0, nvalue);
     target.w = color.w;

@@ -1,25 +1,26 @@
 {
   "textures": {
-    "downsample":     { "width": 1280, "height": 480, "filter": true },
-    "gamma":          { "width": 1280, "height": 480, "filter": true },
-    "cutoff":         { "width": 1280, "height": 480, "filter": true },
-    "yiq":            { "width": 1280, "height": 480, "filter": true },
-    "luminance_lp_a": { "width": 1280, "height": 480, "filter": true },
-    "luminance_lp_b": { "width": 1280, "height": 480, "filter": true },
-    "luminance":      { "width": 1280, "height": 480, "filter": true },
-    "color_noise":    { "width": 1280, "height": 480, "filter": true },
-    "color_lowpass":  { "width": 1280, "height": 480, "filter": true },
-    "chrominance":    { "width": 1280, "height": 480, "filter": true },
-    "swizzle":        { "width": 1280, "height": 480, "filter": true },
-    "sharpen":        { "width": 1280, "height": 480, "filter": true },
-    "dropout":        { "width": 1280, "height": 480, "filter": true },
-    "headswitch":     { "width": 1280, "height": 480, "filter": true },
-    "tracking":       { "width": 1280, "height": 480, "filter": true },
-    "composite":      { "width": 1280, "height": 480, "filter": true },
-    "snow":           { "width": 1280, "height": 480, "filter": true },
-    "demodulate":     { "width": 1280, "height": 480, "filter": true },
-    "postprocess":    { "width": 1280, "height": 480, "filter": true },
-    "result":         { "width": 1280, "height": 480, "filter": true }
+    "downsample":     { "width": 1280, "height": 240, "filter": true },
+    "gamma":          { "width": 1280, "height": 240, "filter": true },
+    "cutoff":         { "width": 1280, "height": 240, "filter": true },
+    "yiq":            { "width": 1280, "height": 240, "filter": true },
+    "lowrange":       { "width": 1280, "height": 240, "filter": true },
+    "luminance_lp_a": { "width": 1280, "height": 240, "filter": true },
+    "luminance_lp_b": { "width": 1280, "height": 240, "filter": true },
+    "luminance":      { "width": 1280, "height": 240, "filter": true },
+    "color_noise":    { "width": 1280, "height": 240, "filter": true },
+    "color_lowpass":  { "width": 1280, "height": 240, "filter": true },
+    "chrominance":    { "width": 1280, "height": 240, "filter": true },
+    "swizzle":        { "width": 1280, "height": 240, "filter": true },
+    "sharpen":        { "width": 1280, "height": 240, "filter": true },
+    "dropout":        { "width": 1280, "height": 240, "filter": true },
+    "headswitch":     { "width": 1280, "height": 240, "filter": true },
+    "tracking":       { "width": 1280, "height": 240, "filter": true },
+    "composite":      { "width": 1280, "height": 240, "filter": true },
+    "snow":           { "width": 1280, "height": 240, "filter": true },
+    "demodulate":     { "width": 1280, "height": 240, "filter": true },
+    "postprocess":    { "width": 1280, "height": 240, "filter": true },
+    "result":         { "width": 1280, "height": 240, "filter": true }
   },
   "blit": "result",
   "passes": [
@@ -48,8 +49,14 @@
       "params": []
     },
     {
-      "shader": "shaders/blur_lowpass.frag",
+      "shader": "shaders/lowrange.frag",
       "samplers": ["yiq"],
+      "output": "lowrange",
+      "params": [0.4, 0.75]
+    },
+    {
+      "shader": "shaders/blur_lowpass.frag",
+      "samplers": ["lowrange"],
       "output": "luminance_lp_a",
       "params": [64, 0.285, 1.0]
     },
@@ -67,13 +74,13 @@
     },
     {
       "shader": "shaders/vhs_color_noise.frag",
-      "samplers": ["yiq"],
+      "samplers": ["lowrange"],
       "output": "color_noise",
       "params": [0.03125, 0.05, 50, 0.02]
     },
     {
       "shader": "shaders/blur_lowpass.frag",
-      "samplers": ["yiq"],
+      "samplers": ["lowrange"],
       "output": "color_lowpass",
       "params": [128, 0.025, 1]
     },
