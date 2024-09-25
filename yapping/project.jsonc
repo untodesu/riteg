@@ -1,0 +1,21 @@
+{
+    "project.display": "Test project",
+    "project.path": "${HOME}/test_project",
+    
+    "input.mode": "directory_iterator",
+    "input.path": "${project.path}/source_frames",
+    
+    "output.mode": "std_sprintf",
+    "output.path": "${project.path}/dest_frames",
+    "output.format": "%06d.png",
+    
+    "scripts.before": [{
+        "params": ["${project.path}/source.mp4", "${input.path}"],
+        "command": "ffmpeg -i %0 %1/%%06d.png"
+    }],
+    
+    "scripts.after": [{
+        "params": ["${output.path}", "${project.path}/dest.mp4"],
+        "command": "ffmpeg -i %0/%%06d.png -vcodec libx264 -crf 25 -r 30 %1"
+    }],
+}

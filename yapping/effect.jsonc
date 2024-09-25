@@ -1,0 +1,6 @@
+{
+    "display": "Combine two textures",
+    "shader": "${ASSETS}/effects/combine.frag",
+    "samplers": ["s_Texture1", "s_Texture2"],
+    "params": [0.5]
+}
