@@ -34,7 +34,8 @@ add_executable(riteg
     "${CMAKE_CURRENT_LIST_DIR}/riteg/globals.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/logging.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/main.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/menu_bar.cc")
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/menu_bar.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/style.cc")
 target_compile_definitions(riteg PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
 target_link_libraries(riteg PRIVATE glad glfw imgui imgui_glfw imgui_opengl3)

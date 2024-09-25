@@ -4,6 +4,7 @@
 #include "riteg/globals.hh"
 #include "riteg/logging.hh"
 #include "riteg/menu_bar.hh"
+#include "riteg/style.hh"
 
 #if defined(_WIN32)
 extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -81,8 +82,9 @@ int main(void)
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    ImGui::StyleColorsDark();
+    style::apply();
 
     // Dummy values for visual clutter
     g_curframe = 42;
@@ -97,7 +99,15 @@ int main(void)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+
         menu_bar::render();
+
+        if(ImGui::Begin("Style editor"))
+            ImGui::ShowStyleEditor();
+        ImGui::End();
+
+        ImGui::ShowDemoWindow();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

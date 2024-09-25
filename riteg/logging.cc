@@ -3,9 +3,9 @@
 #include "riteg/pch.hh"
 #include "riteg/logging.hh"
 
-constexpr static const char *CONSOLE_INFO = "\e[1;32m[INFO]\e[0m ";
-constexpr static const char *CONSOLE_WARN = "\e[1;33m[WARN]\e[0m ";
-constexpr static const char *CONSOLE_CRIT = "\e[1;31m[CRIT]\e[0m ";
+constexpr static const char *CONSOLE_INFO = "\x1B[1;32m[INFO]\x1B[0m ";
+constexpr static const char *CONSOLE_WARN = "\x1B[1;33m[WARN]\x1B[0m ";
+constexpr static const char *CONSOLE_CRIT = "\x1B[1;31m[CRIT]\x1B[0m ";
 
 constexpr static const char *LOGFILE_INFO = "[INFO] ";
 constexpr static const char *LOGFILE_WARN = "[WARN] ";
