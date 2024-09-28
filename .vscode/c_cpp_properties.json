@@ -11,6 +11,7 @@
             "includePath": [
                 "${workspaceFolder}/deps/glad/include",
                 "${workspaceFolder}/deps/imgui/include",
+                "${workspaceFolder}/deps/imnodes/include",
                 "${workspaceFolder}",
                 "${default}"
             ]

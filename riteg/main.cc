@@ -4,6 +4,7 @@
 #include "riteg/globals.hh"
 #include "riteg/logging.hh"
 #include "riteg/menu_bar.hh"
+#include "riteg/node_editor.hh"
 #include "riteg/style.hh"
 
 #if defined(_WIN32)
@@ -79,12 +80,16 @@ int main(void)
     ImGui_ImplGlfw_InitForOpenGL(g_window, true);
     ImGui_ImplOpenGL3_Init(nullptr);
 
+    g_nodes_ctx = ImNodes::Ez::CreateContext();
+
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     style::apply();
+
+    node_editor::init();
 
     // Dummy values for visual clutter
     g_curframe = 42;
@@ -103,11 +108,11 @@ int main(void)
 
         menu_bar::render();
 
-        if(ImGui::Begin("Style editor"))
+        node_editor::render();
+
+        if(ImGui::Begin("Style Edit"))
             ImGui::ShowStyleEditor();
         ImGui::End();
-
-        ImGui::ShowDemoWindow();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -115,6 +120,8 @@ int main(void)
         glfwSwapBuffers(g_window);
         glfwPollEvents();
     }
+
+    ImNodes::Ez::FreeContext(g_nodes_ctx);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
