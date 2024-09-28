@@ -32,7 +32,8 @@ if(NOT glfw3_FOUND)
 endif()
 
 add_executable(riteg
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shader_node.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/node.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shader.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/core/globals.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/core/logging.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/menu_bar.cc"

@@ -90,7 +90,7 @@ int main(void)
     style::apply_imgui();
     style::apply_imnodes();
 
-    node_edit::init_remove_me_asap();
+    node_edit::init();
 
     // Dummy values for visual clutter
     globals::pr_num_frames = 1800;

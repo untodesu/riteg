@@ -4,6 +4,6 @@
 
 namespace node_edit
 {
-void init_remove_me_asap(void);
+void init(void);
 void layout(void);
 } // namespace node_edit

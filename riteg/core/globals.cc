@@ -4,8 +4,8 @@
 #include "riteg/core/globals.hh"
 
 GLFWwindow *globals::window = nullptr;
-
 ImNodes::Ez::Context *globals::imnodes_ctx = nullptr;
 
+std::unordered_set<Node *> globals::pr_nodes = {};
 std::size_t globals::pr_num_frames = SIZE_MAX;
 std::size_t globals::pr_cur_frame = SIZE_MAX;

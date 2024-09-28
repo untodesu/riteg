@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
 #include "riteg/stdafx.hh"
+#include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
-#include "riteg/graph/base_node.hh"
-#include "riteg/graph/shader_node.hh"
+#include "riteg/graph/node.hh"
+#include "riteg/graph/shader.hh"
 #include "riteg/gui/node_edit.hh"
 
-constexpr static int TEX_SLOT_KIND = 1;
-
-// FIXME: move this somewhere else ASAP
-static std::vector<BaseNode *> s_nodes = {};
+constexpr static int DEFAULT_SLOT_KIND = 1;
 
 static ImNodes::Ez::SlotInfo basic_input = {};
 static ImNodes::Ez::SlotInfo basic_output = {};
@@ -18,57 +16,74 @@ static std::vector<std::string> tex_slot_names = {};
 
 static void layout_shader_node(ShaderNode *node)
 {
-    const std::size_t input_count = node->inputs.size();
+    char buffer[256] = {0};
 
-    if(tex_slots.size() < input_count) {
+    if(tex_slots.size() < node->inputs.size()) {
         // Dynamically grow the string array until
         // we have enough; as per wasting allocations
         // C++ documentation states vectors grow in chunks
-        while(tex_slot_names.size() < input_count) {
-            char staging_buffer[256] = {};
-            std::snprintf(staging_buffer, sizeof(staging_buffer), "[%zu]", tex_slot_names.size());
-            tex_slot_names.push_back(std::string(staging_buffer));
+        while(tex_slot_names.size() < node->inputs.size()) {
+            std::snprintf(buffer, sizeof(buffer), "iTexture%zu", tex_slot_names.size());
+            tex_slot_names.push_back(std::string(buffer));
         }
 
-        tex_slots.resize(input_count);
+        tex_slots.resize(node->inputs.size(), ImNodes::Ez::SlotInfo());
 
-        for(std::size_t i = 0; i < input_count; ++i) {
+        for(std::size_t i = 0; i < tex_slots.size(); ++i) {
             tex_slots[i].title = tex_slot_names[i].c_str();
-            tex_slots[i].kind = TEX_SLOT_KIND;
+            tex_slots[i].kind = DEFAULT_SLOT_KIND;
         }
     }
 
-    ImNodes::Ez::InputSlots(tex_slots.data(), static_cast<int>(input_count));
+    ImNodes::Ez::InputSlots(tex_slots.data(), static_cast<int>(tex_slots.size()));
+
+    ImGui::BeginDisabled();
+    std::uint64_t num_params = static_cast<std::uint64_t>(node->params.size());
+    ImGui::InputScalar("", ImGuiDataType_U64, &num_params);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+
+    // Decrease parameter count
+    if(ImGui::Button(" - ") && node->params.size())
+        node->params.pop_back();
+    ImGui::SameLine();
+
+    // Increase parameter count
+    if(ImGui::Button(" + "))
+        node->params.push_back(0.0f);
+    ImGui::NewLine();
+
+    ImGui::PushItemWidth(1.5f * ImGui::CalcItemWidth());
+
+    for(std::size_t i = 0; i < node->params.size(); ++i) {
+        std::snprintf(buffer, sizeof(buffer), "[%zu]", i);
+        ImGui::InputFloat(buffer, &node->params[i]);
+    }
+
+    ImGui::PopItemWidth();
     ImNodes::Ez::OutputSlots(&basic_output, 1);
 }
 
-void node_edit::init_remove_me_asap(void)
+void node_edit::init(void)
 {
     basic_input.title = "Input";
-    basic_input.kind = TEX_SLOT_KIND;
+    basic_input.kind = DEFAULT_SLOT_KIND;
 
     basic_output.title = "Output";
-    basic_output.kind = TEX_SLOT_KIND;
+    basic_output.kind = DEFAULT_SLOT_KIND;
 
-    // Create a basic shader node
-    ShaderNode *nx = new ShaderNode();
-    nx->inputs.resize(2, nullptr);
-    nx->title = std::string("Test Node [1]");
-    nx->position = ImVec2(50.0f, 100.0f);
-    nx->selected = false;
 
-    // Create a basic shader node
-    ShaderNode *ny = new ShaderNode();
-    ny->inputs.resize(4, nullptr);
-    ny->title = std::string("Test Node [2]");
-    ny->position = ImVec2(250.0f, 100.0f);
-    ny->selected = false;
+    //
+    // FIXME: Move this somewhere else ASAP
+    //
 
-    ny->inputs[0] = nx;
-    ny->inputs[2] = nx;
-
-    s_nodes.push_back(nx);
-    s_nodes.push_back(ny);
+    char staging_buffer[256] = {};
+    for(std::size_t i = 0; i < 4; ++i) {
+        std::snprintf(staging_buffer, sizeof(staging_buffer), "Node[%zu]", i);
+        ShaderNode *node = new ShaderNode(staging_buffer);
+        node->inputs.resize(4, nullptr);
+        globals::pr_nodes.insert(node);
+    }
 }
 
 void node_edit::layout(void)
@@ -80,60 +95,53 @@ void node_edit::layout(void)
 
     ImNodes::Ez::BeginCanvas();
 
-    for(BaseNode *node : s_nodes) {
-        const NodeType type = node->get_type();
+    const float item_width = 0.125f * ImGui::CalcItemWidth();
+    const float zoom_factor = ImNodes::GetCurrentCanvas()->Zoom;
+    ImGui::PushItemWidth(item_width * zoom_factor);
 
+    for(Node *node : globals::pr_nodes) {
         if(ImNodes::Ez::BeginNode(node, node->title.c_str(), &node->position, &node->selected)) {
-            switch(type) {
-            case NodeType::SOURCE_NODE:
-                // layout_source_node(static_cast<SourceNode *>(node));
-                break;
-            case NodeType::TARGET_NODE:
-                // layout_target_node(static_cast<TargetNode *>(node));
-                break;
-            case NodeType::SHADER_NODE:
-                layout_shader_node(static_cast<ShaderNode *>(node));
-                break;
-            default:
-                ImGui::TextUnformatted("If you see this, the code is fucked");
-                break;
-            }
+            switch(node->get_type()) {
+                case Node::SOURCE: break;
+                case Node::TARGET: break;
+                case Node::SHADER: layout_shader_node(static_cast<ShaderNode *>(node)); break;
+            }            
 
             ImNodes::Ez::EndNode();
         }
 
-        const std::size_t input_count = node->inputs.size();
-        for(std::size_t i = 0; i < input_count; ++i) {
+        for(std::size_t i = 0; i < node->inputs.size(); ++i) {
             if(node->inputs[i] != nullptr) {
-                const char *input_title = tex_slots[i].title;
-                const char *output_title = basic_output.title;
+                const char *src_cstr = basic_output.title;
+                const char *dst_cstr = tex_slots[i].title;
 
-                if(!ImNodes::Connection(node, input_title, node->inputs[i], output_title)) {
+                if(!ImNodes::Connection(node, dst_cstr, node->inputs[i], src_cstr)) {
                     node->inputs[i]->outputs.erase(node);
                     node->inputs[i] = nullptr;
-                    continue;
                 }
             }
         }
     }
 
-    void *input_ptr = nullptr;
-    void *output_ptr = nullptr;
-    const char *input_slot = nullptr;
-    const char *output_slot = nullptr;
-    if(ImNodes::GetNewConnection(&input_ptr, &input_slot, &output_ptr, &output_slot)) {
-        BaseNode *input_node = reinterpret_cast<BaseNode *>(input_ptr);
-        BaseNode *output_node = reinterpret_cast<BaseNode *>(output_ptr);
+    void *src_ptr = nullptr;
+    void *dst_ptr = nullptr;
+    const char *src_cstr = nullptr;
+    const char *dst_cstr = nullptr;
 
-        std::size_t input_index;
-        std::sscanf(input_slot, "[%zu]", &input_index);
+    if(ImNodes::GetNewConnection(&dst_ptr, &dst_cstr, &src_ptr, &src_cstr)) {
+        Node *src_node = reinterpret_cast<Node *>(src_ptr);
+        Node *dst_node = reinterpret_cast<Node *>(dst_ptr);
 
-        if(input_node->inputs.size() > input_index) {
-            input_node->inputs[input_index] = output_node;
-            output_node->outputs.insert(input_node);
+        std::size_t dst_index = {};
+        std::sscanf(dst_cstr, "iTexture%zu", &dst_index);
+
+        if(dst_index < dst_node->inputs.size()) {
+            dst_node->inputs[dst_index] = src_node;
+            src_node->outputs.insert(dst_node);
         }
     }
 
+    ImGui::PopItemWidth();
     ImNodes::Ez::EndCanvas();
     ImGui::End();
 }
