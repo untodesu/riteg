@@ -2,7 +2,8 @@
 // Copyright (C) 2024, untodesu
 #pragma once
 
-namespace menu_bar
+namespace style
 {
-void render(void);
-} // namespace menu_bar
+void apply_imgui(void);
+void apply_imnodes(void);
+} // namespace style

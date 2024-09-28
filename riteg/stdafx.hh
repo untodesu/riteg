@@ -7,9 +7,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
@@ -20,3 +24,5 @@
 
 #include <imnodes.h>
 #include <imnodes_ez.h>
+
+namespace fs = std::filesystem;

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
-#include "riteg/pch.hh"
-#include "riteg/globals.hh"
-#include "riteg/menu_bar.hh"
+#include "riteg/stdafx.hh"
+#include "riteg/core/globals.hh"
+#include "riteg/gui/menu_bar.hh"
 
-void menu_bar::render(void)
+void menu_bar::layout(void)
 {
     if(ImGui::BeginMainMenuBar()) {
         if(ImGui::BeginMenu("File")) {
@@ -20,7 +20,7 @@ void menu_bar::render(void)
             ImGui::Separator();
 
             if(ImGui::MenuItem("Exit", nullptr)) {
-                glfwSetWindowShouldClose(g_window, true);
+                glfwSetWindowShouldClose(globals::window, true);
             }
 
             ImGui::EndMenu();
@@ -41,7 +41,7 @@ void menu_bar::render(void)
         const ImGuiIO &io = ImGui::GetIO();
         const ImVec2 &vsz = ImGui::GetMainViewport()->Size;
         ImGui::Separator(); ImGui::TextDisabled("%.0fx%.0f % 3.0f FPS", vsz.x, vsz.y, io.Framerate);
-        ImGui::Separator(); ImGui::TextDisabled("FRAME % 6zu/%-6zu", g_curframe, g_numframes);
+        ImGui::Separator(); ImGui::TextDisabled("FRAME % 6zu/%-6zu", globals::pr_cur_frame, globals::pr_num_frames);
         ImGui::Separator(); ImGui::TextColored(ImVec4(col_r, 1.0f, col_b, 1.0f), "RITEG V2");
 
         ImGui::EndMainMenuBar();

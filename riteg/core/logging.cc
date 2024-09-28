@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
-#include "riteg/pch.hh"
-#include "riteg/logging.hh"
+#include "riteg/stdafx.hh"
+#include "riteg/core/logging.hh"
 
 constexpr static const char *CONSOLE_INFO = "\x1B[1;32m[INFO]\x1B[0m ";
 constexpr static const char *CONSOLE_WARN = "\x1B[1;33m[WARN]\x1B[0m ";

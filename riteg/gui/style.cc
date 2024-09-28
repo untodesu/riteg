@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
-#include "riteg/pch.hh"
-#include "riteg/style.hh"
+#include "riteg/stdafx.hh"
+#include "riteg/gui/style.hh"
 
-void style::apply(void)
+void style::apply_imgui(void)
 {
     auto &style = ImGui::GetStyle();
-    auto &n_style = ImNodes::Ez::GetStyle();
-    auto &n_state = ImNodes::Ez::GetState();
 
     style.DockingSeparatorSize = 2.0f;
 
@@ -26,12 +24,6 @@ void style::apply(void)
     style.PopupBorderSize           = 1.0f;
     style.FrameBorderSize           = 0.0f;
     style.ChildBorderSize           = 1.0f;
-
-    n_style.SlotRadius              = 4.0f;
-    n_style.ItemSpacing.x           = 8.0f;
-    n_style.ItemSpacing.y           = 4.0f;
-    n_state.Style.CurveThickness    = 2.0f;
-    n_state.Style.NodeRounding      = 0.0f;
 
     style.Colors[ImGuiCol_Text]                         = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     style.Colors[ImGuiCol_TextDisabled]                 = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
@@ -91,21 +83,35 @@ void style::apply(void)
     style.Colors[ImGuiCol_NavWindowingHighlight]        = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
     style.Colors[ImGuiCol_NavWindowingDimBg]            = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
     style.Colors[ImGuiCol_ModalWindowDimBg]             = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+}
 
-    n_style.Colors.NodeBodyBg                           = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
-    n_style.Colors.NodeBodyBgHovered                    = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
-    n_style.Colors.NodeBodyBgActive                     = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-    n_style.Colors.NodeBorder                           = style.Colors[ImGuiCol_Border];
-    n_style.Colors.NodeTitleBarBg                       = style.Colors[ImGuiCol_TitleBg];
-    n_style.Colors.NodeTitleBarBgHovered                = style.Colors[ImGuiCol_TitleBg];
-    n_style.Colors.NodeTitleBarBgActive                 = style.Colors[ImGuiCol_TitleBgActive];
+void style::apply_imnodes(void)
+{
+    auto &style = ImGui::GetStyle();
+    auto &n_style = ImNodes::Ez::GetStyle();
+    auto &n_state = ImNodes::Ez::GetState();
 
-    n_state.Colors[ImNodes::ColCanvasLines]             = style.Colors[ImGuiCol_Separator];
-    n_state.Colors[ImNodes::ColNodeBg]                  = style.Colors[ImGuiCol_WindowBg];
-    n_state.Colors[ImNodes::ColNodeActiveBg]            = style.Colors[ImGuiCol_FrameBgActive];
-    n_state.Colors[ImNodes::ColNodeBorder]              = style.Colors[ImGuiCol_Border];
-    n_state.Colors[ImNodes::ColConnection]              = style.Colors[ImGuiCol_PlotLines];
-    n_state.Colors[ImNodes::ColConnectionActive]        = style.Colors[ImGuiCol_PlotLinesHovered];
-    n_state.Colors[ImNodes::ColSelectBg]                = style.Colors[ImGuiCol_FrameBgActive];
-    n_state.Colors[ImNodes::ColSelectBorder]            = style.Colors[ImGuiCol_Border];
+    n_style.SlotRadius      = 4.0f;
+    n_style.ItemSpacing.x   = 8.0f;
+    n_style.ItemSpacing.y   = 4.0f;
+
+    n_state.Style.CurveThickness    = 2.0f;
+    n_state.Style.NodeRounding      = 0.0f;
+
+    n_style.Colors.NodeBodyBg               = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+    n_style.Colors.NodeBodyBgHovered        = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+    n_style.Colors.NodeBodyBgActive         = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+    n_style.Colors.NodeBorder               = style.Colors[ImGuiCol_Border];
+    n_style.Colors.NodeTitleBarBg           = style.Colors[ImGuiCol_TitleBg];
+    n_style.Colors.NodeTitleBarBgHovered    = style.Colors[ImGuiCol_TitleBg];
+    n_style.Colors.NodeTitleBarBgActive     = style.Colors[ImGuiCol_TitleBgActive];
+
+    n_state.Colors[ImNodes::ColCanvasLines]         = style.Colors[ImGuiCol_Separator];
+    n_state.Colors[ImNodes::ColNodeBg]              = style.Colors[ImGuiCol_WindowBg];
+    n_state.Colors[ImNodes::ColNodeActiveBg]        = style.Colors[ImGuiCol_FrameBgActive];
+    n_state.Colors[ImNodes::ColNodeBorder]          = style.Colors[ImGuiCol_Border];
+    n_state.Colors[ImNodes::ColConnection]          = style.Colors[ImGuiCol_PlotLines];
+    n_state.Colors[ImNodes::ColConnectionActive]    = style.Colors[ImGuiCol_PlotLinesHovered];
+    n_state.Colors[ImNodes::ColSelectBg]            = style.Colors[ImGuiCol_FrameBgActive];
+    n_state.Colors[ImNodes::ColSelectBorder]        = style.Colors[ImGuiCol_Border];
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
-#include "riteg/pch.hh"
-#include "riteg/globals.hh"
-#include "riteg/logging.hh"
-#include "riteg/menu_bar.hh"
-#include "riteg/node_editor.hh"
-#include "riteg/style.hh"
+#include "riteg/stdafx.hh"
+#include "riteg/core/globals.hh"
+#include "riteg/core/logging.hh"
+#include "riteg/gui/menu_bar.hh"
+#include "riteg/gui/node_edit.hh"
+#include "riteg/gui/style.hh"
 
 #if defined(_WIN32)
 extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -39,16 +39,16 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_SAMPLES, 0);
 
-    g_window = glfwCreateWindow(1280, 720, "RITEG V2", nullptr, nullptr);
+    globals::window = glfwCreateWindow(1280, 720, "RITEG V2", nullptr, nullptr);
 
-    if(!g_window) {
+    if(!globals::window) {
         logging::crit("glfw: failed to open a window");
         std::terminate();
     }
 
-    glfwSetWindowSizeLimits(g_window, 720, 480, GLFW_DONT_CARE, GLFW_DONT_CARE);
+    glfwSetWindowSizeLimits(globals::window, 720, 480, GLFW_DONT_CARE, GLFW_DONT_CARE);
 
-    glfwMakeContextCurrent(g_window);
+    glfwMakeContextCurrent(globals::window);
     glfwSwapInterval(1);
 
     if(!gladLoadGL(&glfwGetProcAddress)) {
@@ -77,25 +77,26 @@ int main(void)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(g_window, true);
+    ImGui_ImplGlfw_InitForOpenGL(globals::window, true);
     ImGui_ImplOpenGL3_Init(nullptr);
 
-    g_nodes_ctx = ImNodes::Ez::CreateContext();
+    globals::imnodes_ctx = ImNodes::Ez::CreateContext();
 
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    style::apply();
+    style::apply_imgui();
+    style::apply_imnodes();
 
-    node_editor::init();
+    node_edit::init_remove_me_asap();
 
     // Dummy values for visual clutter
-    g_curframe = 42;
-    g_numframes = 1800;
+    globals::pr_num_frames = 1800;
+    globals::pr_cur_frame = 42;
 
-    while(!glfwWindowShouldClose(g_window)) {
+    while(!glfwWindowShouldClose(globals::window)) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClearColor(0.000f, 0.000f, 0.100f, 1.000f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -106,9 +107,8 @@ int main(void)
 
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-        menu_bar::render();
-
-        node_editor::render();
+        menu_bar::layout();
+        node_edit::layout();
 
         if(ImGui::Begin("Style Edit"))
             ImGui::ShowStyleEditor();
@@ -117,17 +117,17 @@ int main(void)
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-        glfwSwapBuffers(g_window);
+        glfwSwapBuffers(globals::window);
         glfwPollEvents();
     }
 
-    ImNodes::Ez::FreeContext(g_nodes_ctx);
+    ImNodes::Ez::FreeContext(globals::imnodes_ctx);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    glfwDestroyWindow(g_window);
+    glfwDestroyWindow(globals::window);
     glfwTerminate();
 
     logging::deinit();

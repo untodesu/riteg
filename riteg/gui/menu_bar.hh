@@ -2,8 +2,7 @@
 // Copyright (C) 2024, untodesu
 #pragma once
 
-namespace node_editor
+namespace menu_bar
 {
-void init(void);
-void render(void);
-} // namespace node_editor
+void layout(void);
+} // namespace menu_bar
