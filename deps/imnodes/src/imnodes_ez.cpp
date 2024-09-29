@@ -56,7 +56,7 @@ struct Context
     ImVector<StyleColMod> StyleColStack;
     ImDrawListSplitter NodeSplitter;
     ImDrawListSplitter CanvasSplitter;
-    float BodyPosY;
+    float BodyPosY, MaxInputWidth {0.0f};
     bool *NodeSelected;
     CanvasState State;
 };
@@ -326,13 +326,19 @@ void InputSlots(const SlotInfo* slots, int snum)
 
     // Render input slots
     ImGui::BeginGroup();
-    {
-        for (int i = 0; i < snum; i++)
-            ImNodes::Ez::Slot(slots[i].title, ImNodes::InputSlotKind(slots[i].kind), pos);
+
+    for(int i = 0; i < snum; ++i) {
+        const float input_width = ImGui::CalcTextSize(slots[i].title).x;
+        if(input_width > g.MaxInputWidth)
+            g.MaxInputWidth = input_width;
+        ImNodes::Ez::Slot(slots[i].title, ImNodes::InputSlotKind(slots[i].kind), pos);
     }
+
     ImGui::EndGroup();
 
-    storage->SetFloat(ImGui::GetID("input-width"), ImGui::GetItemRectSize().x);
+    // RITEG ImNodes patch: the node was growing horizontally
+    // with the amount of inputs; this ensures we only take what we need
+    storage->SetFloat(ImGui::GetID("input-width"), g.MaxInputWidth + 2.0f * g.Style.ItemSpacing.x);
 
     // Move cursor to the next column
     ImGui::SetCursorScreenPos(ImVec2{storage->GetFloat(ImGui::GetID("content-x")), storage->GetFloat(ImGui::GetID("body-y"))});

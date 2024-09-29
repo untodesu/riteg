@@ -116,6 +116,8 @@ int main(void)
             ImGui::ShowStyleEditor();
         ImGui::End();
 
+        ImGui::ShowDemoWindow();
+
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

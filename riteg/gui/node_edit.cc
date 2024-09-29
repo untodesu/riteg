@@ -8,93 +8,157 @@
 #include "riteg/graph/target_imgui.hh"
 #include "riteg/gui/node_edit.hh"
 
-constexpr static int DEFAULT_SLOT_KIND = 1;
+// All nodes share exact same slot kind
+constexpr static int DEFAULT_SLOT_KIND = 42;
+
+// Popup ID used to open/layout the popup frame
+constexpr static const char *POPUP_ID = "NodeEdit_ContextMenu";
 
 static ImNodes::Ez::SlotInfo output_slot = {};
 static std::vector<ImNodes::Ez::SlotInfo> input_slots = {};
 static std::vector<std::string> input_slot_names = {};
+static bool has_selected_nodes = false;
+static Node *target_node = nullptr;
+
+static void update_input_slots(Node *node)
+{
+    if(input_slots.size() < node->inputs.size()) {
+        // Dynamically grow the string array until
+        // we have enough; as per wasting allocations
+        // C++ documentation states vectors grow in chunks
+        while(input_slot_names.size() < node->inputs.size()) {
+            char staging_buffer[256] = {};
+            std::snprintf(staging_buffer, sizeof(staging_buffer), "Input[%zu]", input_slot_names.size());
+            input_slot_names.push_back(std::string(staging_buffer));
+        }
+
+        input_slots.resize(node->inputs.size(), ImNodes::Ez::SlotInfo());
+
+        for(std::size_t i = 0; i < input_slots.size(); ++i) {
+            input_slots[i].title = input_slot_names[i].c_str();
+            input_slots[i].kind = DEFAULT_SLOT_KIND;
+        }
+    }
+}
 
 static void layout_target_imgui(TargetImGuiNode *node)
 {
-    ImNodes::Ez::InputSlots(input_slots.data(), 1);
-    ImNodes::Ez::OutputSlots(nullptr, 0);
+    ImGui::InputText("Name", &node->title);
+    ImGui::NewLine();
 }
 
 static void layout_shader_pass(ShaderPassNode *node)
 {
-    ImNodes::Ez::InputSlots(input_slots.data(), static_cast<int>(node->inputs.size()));
+    int inputs_count_i = node->inputs.size();
+    int texture_width_i = node->texture_width;
+    int texture_height_i = node->texture_height;
+    int u_node_params_count_i = node->params.size();
 
-    bool make_texture = false;
-    make_texture = make_texture || ImGui::InputInt("Texture width", &node->texture_width);
-    make_texture = make_texture || ImGui::InputInt("Texture height", &node->texture_height);
+    ImGui::InputText("Title", &node->title);
+    ImGui::InputInt("Inputs count", &inputs_count_i);
+    ImGui::InputInt("Output width", &texture_width_i);
+    ImGui::InputInt("Output height", &texture_height_i);
+    ImGui::NewLine();
 
-    if(make_texture) {
-        if(node->texture_width < 1) node->texture_width = 1;
-        if(node->texture_height < 1) node->texture_height = 1;
+    if(inputs_count_i <= 0) inputs_count_i = 0;
+    if(texture_width_i <= 0) texture_width_i = 1;
+    if(texture_height_i <= 0) texture_height_i = 1;
 
+    if(inputs_count_i != node->inputs.size()) {
+        for(int i = inputs_count_i; i < node->inputs.size(); ++i) {
+            if(node->inputs[i] != nullptr) {
+                node->inputs[i]->outputs.erase(node);
+                node->inputs[i] = nullptr;
+            }
+        }
+
+        node->inputs.resize(inputs_count_i, nullptr);
+    }
+
+    if((texture_width_i != node->texture_width) || (texture_height_i != node->texture_height)) {
         if(!node->texture)
             glGenTextures(1, &node->texture);
         glBindTexture(GL_TEXTURE_2D, node->texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, node->texture_width, node->texture_height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texture_width_i, texture_height_i, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        node->texture_height = texture_height_i;
+        node->texture_width = texture_width_i;
     }
 
-    ImGui::BeginDisabled();
-    std::uint64_t num_params = static_cast<std::uint64_t>(node->params.size());
-    ImGui::InputScalar("", ImGuiDataType_U64, &num_params);
-    ImGui::EndDisabled();
-    ImGui::SameLine();
+    if(ImGui::InputInt("Params count", &u_node_params_count_i)) {
+        if(u_node_params_count_i >= 1)
+            node->params.resize(u_node_params_count_i, 0.0f);
+        else node->params.clear();
+    }
 
-    // Decrease parameter count
-    if(ImGui::Button(" - ") && node->params.size())
-        node->params.pop_back();
-    ImGui::SameLine();
-
-    // Increase parameter count
-    if(ImGui::Button(" + "))
-        node->params.push_back(0.0f);
-    ImGui::NewLine();
-
-    ImGui::PushItemWidth(1.60f * ImGui::CalcItemWidth());
-
-    char buffer[256] = {};
+    char tmp_buffer[256] = {};
     for(std::size_t i = 0; i < node->params.size(); ++i) {
-        std::snprintf(buffer, sizeof(buffer), "[%zu]", i);
-        ImGui::InputFloat(buffer, &node->params[i]);
+        std::snprintf(tmp_buffer, sizeof(tmp_buffer), "u_Params[%zu]", i);
+        ImGui::InputFloat(tmp_buffer, &node->params[i]);
+    }
+}
+
+static void layout_popup_add(void)
+{
+    if(ImGui::MenuItem("Image source")) {
+        // TODO: add image source
     }
 
-    ImGui::PopItemWidth();
-    ImNodes::Ez::OutputSlots(&output_slot, 1);
+    if(ImGui::MenuItem("Blank source")) {
+        // TODO: add blank source
+    }
+
+    if(ImGui::MenuItem("Feedback source")) {
+        // TODO: add feedback source
+    }
+
+    ImGui::Separator();
+
+    if(ImGui::MenuItem("Image target")) {
+        // TODO: add image target
+    }
+
+    if(ImGui::MenuItem("Display target")) {
+        TargetImGuiNode *node = new TargetImGuiNode("Display", globals::random_dev());
+        ImNodes::AutoPositionNode(node);
+        globals::pr_nodes.insert(node);
+    }
+
+    ImGui::Separator();
+
+    if(ImGui::MenuItem("Shader pass")) {
+        ShaderPassNode *node = new ShaderPassNode("Shader pass", globals::random_dev());
+        ImNodes::AutoPositionNode(node);
+        globals::pr_nodes.insert(node);
+    }
+}
+
+static void layout_popup_node_ops(void)
+{
+    if(ImGui::MenuItem("Remove")) {
+        globals::pr_nodes.erase(target_node);
+        delete target_node;
+    }
+
+    if(ImGui::MenuItem("Render")) {
+        target_node->render();
+    }
 }
 
 void node_edit::init(void)
 {
     output_slot.title = "Output";
     output_slot.kind = DEFAULT_SLOT_KIND;
-
-
-    //
-    // FIXME: Move this somewhere else ASAP
-    //
-
-    char staging_buffer[256] = {};
-    for(std::size_t i = 0; i < 2; ++i) {
-        std::snprintf(staging_buffer, sizeof(staging_buffer), "Node[%zu]", i);
-        ShaderPassNode *node = new ShaderPassNode(staging_buffer, globals::random_dev());
-        node->inputs.resize(2, nullptr);
-        globals::pr_nodes.insert(node);
-    }
-
-    TargetImGuiNode *node = new TargetImGuiNode("Display", globals::random_dev());
-    globals::pr_nodes.insert(node);
+    target_node = nullptr;
 }
 
 void node_edit::layout(void)
 {
     char buffer[256] = {};
+
 
     if(!ImGui::Begin("Node Editor###NodeEdit_Window")) {
         ImGui::End();
@@ -103,53 +167,45 @@ void node_edit::layout(void)
 
     ImNodes::Ez::BeginCanvas();
 
-    const float item_width = 0.125f * ImGui::CalcItemWidth();
+    const float item_width = 0.25f * ImGui::CalcItemWidth();
     const float zoom_factor = ImNodes::GetCurrentCanvas()->Zoom;
     ImGui::PushItemWidth(item_width * zoom_factor);
 
+    // This is set to true whenever we want to open a context menu this frame;
+    // it is kept as a separate boolean because it's also checked multiple times across the layout
+    const bool open_context_menu = ImGui::IsMouseReleased(ImGuiMouseButton_Right) && ImGui::IsWindowHovered();
+
+    has_selected_nodes = false;
+
+    if(open_context_menu) {
+        ImGui::OpenPopup(POPUP_ID);
+        target_node = nullptr;
+    }
+    
     for(Node *node : globals::pr_nodes) {
-        if(input_slots.size() < node->inputs.size()) {
-            // Dynamically grow the string array until
-            // we have enough; as per wasting allocations
-            // C++ documentation states vectors grow in chunks
-            while(input_slot_names.size() < node->inputs.size()) {
-                std::snprintf(buffer, sizeof(buffer), "Input[%zu]", input_slot_names.size());
-                input_slot_names.push_back(std::string(buffer));
-            }
+        update_input_slots(node);
 
-            input_slots.resize(node->inputs.size(), ImNodes::Ez::SlotInfo());
-
-            for(std::size_t i = 0; i < input_slots.size(); ++i) {
-                input_slots[i].title = input_slot_names[i].c_str();
-                input_slots[i].kind = DEFAULT_SLOT_KIND;
-            }
-        }
-
-        if(ImNodes::Ez::BeginNode(node, node->title.c_str(), &node->position, &node->selected)) {            
+        if(ImNodes::Ez::BeginNode(node, node->title.c_str(), &node->position, &node->selected)) {
             switch(node->get_type()) {
-                case Node::SOURCE_IMAGE:
-                    // layout_source_image(static_cast<SourceImageNode *>(node));
-                    break;
-                case Node::SOURCE_EMPTY:
-                    // layout_source_empty(static_cast<SourceEmptyNode *>(node));
-                    break;
-                case Node::SOURCE_NOISE:
-                    // layout_source_noise(static_cast<SourceNoiseNode *>(node));
-                    break;
-                case Node::TARGET_IMAGE:
-                    // layout_target_image(static_cast<TargetImageNode *>(node));
-                    break;
                 case Node::TARGET_IMGUI:
+                    ImNodes::Ez::InputSlots(input_slots.data(), 1);
                     layout_target_imgui(static_cast<TargetImGuiNode *>(node));
+                    ImNodes::Ez::OutputSlots(nullptr, 0);
                     break;
                 case Node::SHADER_PASS:
+                    ImNodes::Ez::InputSlots(input_slots.data(), node->inputs.size());
                     layout_shader_pass(static_cast<ShaderPassNode *>(node));
+                    ImNodes::Ez::OutputSlots(&output_slot, 1);
                     break;
                 default:
+                    ImNodes::Ez::InputSlots(nullptr, 0);
                     ImGui::TextUnformatted("If you see this, the code is fucked");
+                    ImNodes::Ez::OutputSlots(nullptr, 0);
                     break;
-            }            
+            }
 
+            if(node->selected) has_selected_nodes = true;
+            if(open_context_menu && ImNodes::IsNodeHovered()) target_node = node;
             ImNodes::Ez::EndNode();
         }
 
@@ -193,6 +249,22 @@ void node_edit::layout(void)
     }
 
     ImGui::PopItemWidth();
+
+    if(ImGui::BeginPopup(POPUP_ID, ImGuiWindowFlags_None)) {
+        if(ImGui::BeginMenu("Add")) {
+            layout_popup_add();
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+
+        ImGui::BeginDisabled(!target_node);
+        layout_popup_node_ops();
+        ImGui::EndDisabled();
+
+        ImGui::EndPopup();
+    }
+
     ImNodes::Ez::EndCanvas();
     ImGui::End();
 }

@@ -14,7 +14,9 @@ void node_display::layout(void)
             continue;
         snprintf(buffer, sizeof(buffer), "%s###%zu", node->title.c_str(), node->id);
 
-        if(!ImGui::Begin(buffer)) {
+        ImGui::SetNextWindowSize(ImVec2(128.0f, 128.0f), ImGuiCond_Once);
+
+        if(!ImGui::Begin(buffer, nullptr, 0)) {
             ImGui::End();
             continue;
         }
