@@ -3,15 +3,12 @@
 #pragma once
 #include "riteg/graph/node.hh"
 
-class ShaderNode final : public Node {
+class TargetImGuiNode final : public Node {
 public:
-    explicit ShaderNode(void) = delete;
-    explicit ShaderNode(const std::string &title);
-    virtual ~ShaderNode(void);
+    explicit TargetImGuiNode(void) = delete;
+    explicit TargetImGuiNode(const std::string &title);
+    virtual ~TargetImGuiNode(void) = default;
 
     virtual unsigned int get_type(void) const override;
     virtual bool render(void) override;
-
-public:
-    std::vector<float> params {};
 };

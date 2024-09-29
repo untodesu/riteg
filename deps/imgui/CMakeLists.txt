@@ -8,6 +8,7 @@ add_library(imgui STATIC
     "${CMAKE_CURRENT_LIST_DIR}/src/imgui_tables.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/imgui_widgets.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/imgui.cpp")
+target_compile_definitions(imgui PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
 target_include_directories(imgui PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src")
 

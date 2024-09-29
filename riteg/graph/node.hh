@@ -4,9 +4,12 @@
 
 class Node {
 public:
-    constexpr static unsigned int SOURCE = 0x0000U; // Defines exactly one output
-    constexpr static unsigned int TARGET = 0x0001U; // Defines exactly one input
-    constexpr static unsigned int SHADER = 0x0002U; // Defines multiple inputs and one output
+    constexpr static unsigned int SOURCE_IMAGE = 0x0000U;
+    constexpr static unsigned int SOURCE_EMPTY = 0x0001U;
+    constexpr static unsigned int SOURCE_NOISE = 0x0002U;
+    constexpr static unsigned int TARGET_IMAGE = 0x0003U;
+    constexpr static unsigned int TARGET_IMGUI = 0x0004U;
+    constexpr static unsigned int SHADER_PASS = 0x0005U;
 
 public:
     explicit Node(void) = delete;
@@ -28,4 +31,9 @@ public:
 public:
     ImVec2 position {};
     bool selected {};
+
+public:
+    int texture_width {};
+    int texture_height {};
+    GLuint texture {};
 };

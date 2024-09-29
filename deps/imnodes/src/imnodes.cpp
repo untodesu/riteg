@@ -245,6 +245,7 @@ void BeginCanvas(CanvasState* canvas)
             canvas->Offset.x += io.MouseWheelH * 16.0f;
         }
 
+#if 0 // RITEG ImNodes patch: disable zooming
         if (!io.KeyShift && io.KeyCtrl)
         {
             if (io.MouseWheel != 0)
@@ -256,6 +257,7 @@ void BeginCanvas(CanvasState* canvas)
                 canvas->Offset += (mouseRel - canvas->Offset) * zoomFactor;
             }
         }
+#endif
     }
 
     const float grid = canvas->Style.GridSpacing * canvas->Zoom;

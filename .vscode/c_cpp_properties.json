@@ -7,7 +7,7 @@
             "cStandard": "c99",
             "intelliSenseMode": "linux-gcc-x64",
             "compilerPath": "/usr/bin/g++",
-            "defines": ["GLFW_INCLUDE_NONE"],
+            "defines": ["GLFW_INCLUDE_NONE", "IMGUI_DEFINE_MATH_OPERATORS"],
             "includePath": [
                 "${workspaceFolder}/deps/glad/include",
                 "${workspaceFolder}/deps/imgui/include",

@@ -2,24 +2,24 @@
 // Copyright (C) 2024, untodesu
 #include "riteg/stdafx.hh"
 #include "riteg/core/logging.hh"
-#include "riteg/graph/shader.hh"
+#include "riteg/graph/shader_pass.hh"
 
-ShaderNode::ShaderNode(const std::string &title) : Node(title), params()
+ShaderPassNode::ShaderPassNode(const std::string &title) : Node(title), params()
 {
 
 }
 
-ShaderNode::~ShaderNode(void)
+ShaderPassNode::~ShaderPassNode(void)
 {
 
 }
 
-unsigned int ShaderNode::get_type(void) const
+unsigned int ShaderPassNode::get_type(void) const
 {
-    return Node::SHADER;
+    return Node::SHADER_PASS;
 }
 
-bool ShaderNode::render(void)
+bool ShaderPassNode::render(void)
 {
     for(std::size_t i = 0; i < inputs.size(); ++i) {
         if(inputs[i] != nullptr) {
@@ -29,7 +29,7 @@ bool ShaderNode::render(void)
         }
     }
 
-    logging::info("ShaderNode::render: %s", title.c_str());
+    logging::info("ShaderPassNode::render: %s", title.c_str());
 
     return true;
 }

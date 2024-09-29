@@ -4,6 +4,7 @@
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
 #include "riteg/gui/menu_bar.hh"
+#include "riteg/gui/node_display.hh"
 #include "riteg/gui/node_edit.hh"
 #include "riteg/gui/style.hh"
 
@@ -109,6 +110,7 @@ int main(void)
 
         menu_bar::layout();
         node_edit::layout();
+        node_display::layout();
 
         if(ImGui::Begin("Style Edit"))
             ImGui::ShowStyleEditor();

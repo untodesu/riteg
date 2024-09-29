@@ -5,7 +5,9 @@
 
 Node::Node(const std::string &title) : title(title), inputs(), outputs()
 {
-
+    texture_width = 0;
+    texture_height = 0;
+    texture = 0;
 }
 
 Node::~Node(void)
