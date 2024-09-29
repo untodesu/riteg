@@ -3,7 +3,7 @@
 #include "riteg/stdafx.hh"
 #include "riteg/graph/node.hh"
 
-Node::Node(const std::string &title) : title(title), inputs(), outputs()
+Node::Node(const std::string &title, std::uint64_t id) : title(title), id(id), inputs(), outputs()
 {
     texture_width = 0;
     texture_height = 0;

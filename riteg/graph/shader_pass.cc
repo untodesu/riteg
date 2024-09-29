@@ -4,7 +4,7 @@
 #include "riteg/core/logging.hh"
 #include "riteg/graph/shader_pass.hh"
 
-ShaderPassNode::ShaderPassNode(const std::string &title) : Node(title), params()
+ShaderPassNode::ShaderPassNode(const std::string &title, std::size_t id) : Node(title, id), params()
 {
 
 }

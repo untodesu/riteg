@@ -5,6 +5,7 @@
 
 GLFWwindow *globals::window = nullptr;
 ImNodes::Ez::Context *globals::imnodes_ctx = nullptr;
+std::random_device globals::random_dev = {};
 
 std::unordered_set<Node *> globals::pr_nodes = {};
 std::size_t globals::pr_num_frames = SIZE_MAX;

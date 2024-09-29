@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_set>
 #include <vector>

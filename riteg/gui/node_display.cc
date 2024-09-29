@@ -12,7 +12,7 @@ void node_display::layout(void)
     for(Node *node : globals::pr_nodes) {
         if(node->get_type() != Node::TARGET_IMGUI)
             continue;
-        snprintf(buffer, sizeof(buffer), "Image display: %s", node->title.c_str());
+        snprintf(buffer, sizeof(buffer), "%s###%zu", node->title.c_str(), node->id);
 
         if(!ImGui::Begin(buffer)) {
             ImGui::End();

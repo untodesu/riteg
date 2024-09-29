@@ -13,7 +13,7 @@ public:
 
 public:
     explicit Node(void) = delete;
-    explicit Node(const std::string &title);
+    explicit Node(const std::string &title, std::size_t id);
     virtual ~Node(void);
 
     virtual unsigned int get_type(void) const = 0;
@@ -24,6 +24,7 @@ public:
     virtual bool render(void) = 0;
 
 public:
+    std::size_t id {};
     std::string title {};
     std::vector<Node *> inputs {};
     std::unordered_set<Node *> outputs {};

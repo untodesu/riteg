@@ -6,7 +6,7 @@
 class ShaderPassNode final : public Node {
 public:
     explicit ShaderPassNode(void) = delete;
-    explicit ShaderPassNode(const std::string &title);
+    explicit ShaderPassNode(const std::string &title, std::size_t id);
     virtual ~ShaderPassNode(void);
 
     virtual unsigned int get_type(void) const override;

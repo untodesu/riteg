@@ -3,7 +3,7 @@
 #include "riteg/stdafx.hh"
 #include "riteg/graph/target_imgui.hh"
 
-TargetImGuiNode::TargetImGuiNode(const std::string &title) : Node(title)
+TargetImGuiNode::TargetImGuiNode(const std::string &title, std::size_t id) : Node(title, id)
 {
     inputs.resize(1, nullptr);
 }

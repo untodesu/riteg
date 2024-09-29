@@ -83,12 +83,12 @@ void node_edit::init(void)
     char staging_buffer[256] = {};
     for(std::size_t i = 0; i < 2; ++i) {
         std::snprintf(staging_buffer, sizeof(staging_buffer), "Node[%zu]", i);
-        ShaderPassNode *node = new ShaderPassNode(staging_buffer);
+        ShaderPassNode *node = new ShaderPassNode(staging_buffer, globals::random_dev());
         node->inputs.resize(2, nullptr);
         globals::pr_nodes.insert(node);
     }
 
-    TargetImGuiNode *node = new TargetImGuiNode("Display");
+    TargetImGuiNode *node = new TargetImGuiNode("Display", globals::random_dev());
     globals::pr_nodes.insert(node);
 }
 

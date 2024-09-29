@@ -8,6 +8,7 @@ namespace globals
 {
 extern GLFWwindow *window;
 extern ImNodes::Ez::Context *imnodes_ctx;
+extern std::random_device random_dev;
 
 extern std::unordered_set<Node *> pr_nodes;
 extern std::size_t pr_num_frames;
