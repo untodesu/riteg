@@ -1,5 +1,5 @@
 .vscode/*
 !.vscode/c_cpp_properties.json
-build/
-imgui.ini
+/imgui.ini
+/build/
 riteg.log

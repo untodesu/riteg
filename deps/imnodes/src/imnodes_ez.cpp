@@ -56,7 +56,7 @@ struct Context
     ImVector<StyleColMod> StyleColStack;
     ImDrawListSplitter NodeSplitter;
     ImDrawListSplitter CanvasSplitter;
-    float BodyPosY, MaxInputWidth {0.0f};
+    float BodyPosY, MaxInputWidth {64.0f};
     bool *NodeSelected;
     CanvasState State;
 };

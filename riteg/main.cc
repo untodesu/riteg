@@ -3,15 +3,29 @@
 #include "riteg/stdafx.hh"
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
+#include "riteg/graph/dest_display.hh"
 #include "riteg/gui/menu_bar.hh"
-#include "riteg/gui/node_display.hh"
 #include "riteg/gui/node_edit.hh"
 #include "riteg/gui/style.hh"
+#include "riteg/project.hh"
 
 #if defined(_WIN32)
 extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
+
+constexpr static const char *vert_source = R"glsl(
+    #version 330 core
+    void main(void)
+    {
+        vec2 positions[4];
+        positions[0] = vec2(-1.0, -1.0);
+        positions[1] = vec2(-1.0, +1.0);
+        positions[2] = vec2(+1.0, -1.0);
+        positions[3] = vec2(+1.0, +1.0);
+        gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+    }
+)glsl";
 
 static void on_glfw_error(int code, const char *message)
 {
@@ -21,6 +35,31 @@ static void on_glfw_error(int code, const char *message)
 static void on_opengl_message(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *param)
 {
     logging::info("opengl: %s", message);
+}
+
+static void create_vertex_shader(void)
+{
+    globals::vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(globals::vertex_shader, 1, &vert_source, nullptr);
+    glCompileShader(globals::vertex_shader);
+
+    GLint info_log_length = {};
+    std::basic_string<GLchar> info_log = {};
+    glGetShaderiv(globals::vertex_shader, GL_INFO_LOG_LENGTH, &info_log_length);
+
+    if(info_log_length > 1) {
+        info_log.resize(info_log_length, GLchar(0x00));
+        glGetShaderInfoLog(globals::vertex_shader, info_log_length, nullptr, info_log.data());
+        logging::warn("vert: %s", info_log.c_str());
+    }
+
+    GLint compile_status = {};
+    glGetShaderiv(globals::vertex_shader, GL_COMPILE_STATUS, &compile_status);
+
+    if(!compile_status) {
+        logging::crit("vert: shader compile failed");
+        std::terminate();
+    }
 }
 
 int main(void)
@@ -75,6 +114,9 @@ int main(void)
     logging::info("opengl: GL_VERSION: %s", glGetString(GL_VERSION));
     logging::info("opengl: GL_RENDERER: %s", glGetString(GL_RENDERER));
 
+    create_vertex_shader();
+    glGenVertexArrays(1, &globals::vertex_array);
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -93,11 +135,13 @@ int main(void)
 
     node_edit::init();
 
-    // Dummy values for visual clutter
-    globals::pr_num_frames = 1800;
-    globals::pr_cur_frame = 42;
+    project::open(std::filesystem::current_path() / "project");
 
     while(!glfwWindowShouldClose(globals::window)) {
+        for(BaseNode *node : project::tree) {
+            node->rendered = false;
+        }
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClearColor(0.000f, 0.000f, 0.100f, 1.000f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -106,13 +150,12 @@ int main(void)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+        globals::dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
         menu_bar::layout();
         node_edit::layout();
-        node_display::layout();
 
-        if(ImGui::Begin("Style Edit"))
+        if(ImGui::Begin("Style Edit###StyleEdit_Window"))
             ImGui::ShowStyleEditor();
         ImGui::End();
 
@@ -120,6 +163,19 @@ int main(void)
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        for(BaseNode *node : project::tree) {
+            if(node->get_type() == NODE_DEST_DISPLAY) {
+                DestDisplayNode *dest_node = static_cast<DestDisplayNode *>(node);
+                if(!dest_node->always_render)
+                    continue;
+                globals::render_list.insert(dest_node);
+            }
+        }
+
+        for(BaseNode *node : globals::render_list)
+            node->render();
+        globals::render_list.clear();
 
         glfwSwapBuffers(globals::window);
         glfwPollEvents();
@@ -130,6 +186,9 @@ int main(void)
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    glDeleteVertexArrays(1, &globals::vertex_array);
+    glDeleteShader(globals::vertex_shader);
 
     glfwDestroyWindow(globals::window);
     glfwTerminate();

@@ -2,15 +2,19 @@
 // Copyright (C) 2024, untodesu
 #pragma once
 
-class Node;
+class BaseNode;
 
 namespace globals
 {
 extern GLFWwindow *window;
+extern ImGuiID dockspace_id;
 extern ImNodes::Ez::Context *imnodes_ctx;
-extern std::mt19937_64 random_dev;
 
-extern std::unordered_set<Node *> pr_nodes;
-extern std::size_t pr_num_frames;
-extern std::size_t pr_cur_frame;
+extern GLuint vertex_shader;
+extern GLuint vertex_array;
+
+// Rendering must be done either before or after
+// ImGui; this contains all the nodes that are to
+// be rendered after the current frame
+extern std::unordered_set<BaseNode *> render_list;
 } // namespace globals

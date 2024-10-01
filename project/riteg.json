@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "description": ["Test project"],
+
+  "tree": [
+    {
+      "id": 3999,
+      "type": "NODE_SHADER_PASS",
+      "name": "Generic shader pass",
+      "shader": "shaders/test.frag",
+      "inputs": []
+    },
+    {
+      "id": 12345,
+      "type": "NODE_DEST_IMAGE",
+      "name": "Image output",
+      "inputs": [3999]
+    }
+  ]
+}

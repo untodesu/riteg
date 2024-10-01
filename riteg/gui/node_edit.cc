@@ -3,10 +3,12 @@
 #include "riteg/stdafx.hh"
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
-#include "riteg/graph/node.hh"
+#include "riteg/graph/base_node.hh"
+#include "riteg/graph/dest_display.hh"
 #include "riteg/graph/shader_pass.hh"
-#include "riteg/graph/target_imgui.hh"
+#include "riteg/graph/src_blank.hh"
 #include "riteg/gui/node_edit.hh"
+#include "riteg/project.hh"
 
 // All nodes share exact same slot kind
 constexpr static int DEFAULT_SLOT_KIND = 42;
@@ -18,9 +20,9 @@ static ImNodes::Ez::SlotInfo output_slot = {};
 static std::vector<ImNodes::Ez::SlotInfo> input_slots = {};
 static std::vector<std::string> input_slot_names = {};
 static bool has_selected_nodes = false;
-static Node *target_node = nullptr;
+static BaseNode *target_node = nullptr;
 
-static void update_input_slots(Node *node)
+static void update_input_slots(BaseNode *node)
 {
     if(input_slots.size() < node->inputs.size()) {
         // Dynamically grow the string array until
@@ -41,63 +43,97 @@ static void update_input_slots(Node *node)
     }
 }
 
-static void layout_target_imgui(TargetImGuiNode *node)
+static void layout_dest_display(DestDisplayNode *node)
 {
-    ImGui::InputText("Name", &node->title);
+    ImGui::InputText("Name", &node->name);
+    ImGui::Checkbox("Always render", &node->always_render);
+    ImGui::NewLine();
+
+    if(node->inputs[0] && node->inputs[0]->texture) {
+        const float size = ImGui::CalcItemWidth();
+        ImTextureID texture = reinterpret_cast<ImTextureID>(node->inputs[0]->texture);
+        ImGui::Image(texture, ImVec2(size, size));
+        ImGui::NewLine();
+    }
+}
+
+static void layout_src_blank(SrcBlankNode *node)
+{
+    ImGui::InputText("Name", &node->name);
+    ImGui::NewLine();
+    ImGui::ColorPicker4("Color", &node->color.x);
     ImGui::NewLine();
 }
 
 static void layout_shader_pass(ShaderPassNode *node)
 {
-    int inputs_count_i = node->inputs.size();
-    int texture_width_i = node->texture_width;
-    int texture_height_i = node->texture_height;
-    int u_node_params_count_i = node->params.size();
-
-    ImGui::InputText("Title", &node->title);
-    ImGui::InputInt("Inputs count", &inputs_count_i);
-    ImGui::InputInt("Output width", &texture_width_i);
-    ImGui::InputInt("Output height", &texture_height_i);
+    ImGui::InputText("Name", &node->name);
     ImGui::NewLine();
 
-    if(inputs_count_i <= 0) inputs_count_i = 0;
-    if(texture_width_i <= 0) texture_width_i = 1;
-    if(texture_height_i <= 0) texture_height_i = 1;
+    int inputs_count = node->inputs.size();
 
-    if(inputs_count_i != node->inputs.size()) {
-        for(int i = inputs_count_i; i < node->inputs.size(); ++i) {
+    if(ImGui::InputInt("Inputs count", &inputs_count)) {
+        for(int i = inputs_count; i < node->inputs.size(); ++i) {
             if(node->inputs[i] != nullptr) {
                 node->inputs[i]->outputs.erase(node);
                 node->inputs[i] = nullptr;
             }
         }
 
-        node->inputs.resize(inputs_count_i, nullptr);
+        if(inputs_count <= 0)
+            node->inputs.clear();
+        else node->inputs.resize(inputs_count, nullptr);
+        node->update_uniforms();
     }
 
-    if((texture_width_i != node->texture_width) || (texture_height_i != node->texture_height)) {
-        if(!node->texture)
-            glGenTextures(1, &node->texture);
-        glBindTexture(GL_TEXTURE_2D, node->texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texture_width_i, texture_height_i, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        node->texture_height = texture_height_i;
-        node->texture_width = texture_width_i;
+    int texture_size[2] = {};
+    texture_size[0] = node->texture_width;
+    texture_size[1] = node->texture_height;
+
+    if(!node->texture_width || !node->texture_height || ImGui::DragInt2("Output size", texture_size, 1.0f, 1, 4096)) {
+        node->texture_width = texture_size[0] ? texture_size[0] : 1;
+        node->texture_height = texture_size[1] ? texture_size[1] : 1;
+        node->update_texture();
     }
 
-    if(ImGui::InputInt("Params count", &u_node_params_count_i)) {
-        if(u_node_params_count_i >= 1)
-            node->params.resize(u_node_params_count_i, 0.0f);
+    if(ImGui::InputText("Shader", &node->shader_path)) {
+        node->update_shader();
+        node->update_uniforms();
+    }
+    
+    if(!node->shader_info_log.empty() || !node->program_info_log.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("[!!!]");
+        if(ImGui::BeginItemTooltip()) {
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+            if(!node->shader_info_log.empty())
+                ImGui::TextUnformatted(node->shader_info_log.c_str());
+            if(!node->program_info_log.empty())
+                ImGui::TextUnformatted(node->program_info_log.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
+    }
+
+    if(ImGui::Button("Force recompile", ImVec2(ImGui::CalcItemWidth(), 0.0f))) {
+        node->update_shader();
+        node->update_uniforms();
+    }
+
+    ImGui::NewLine();
+
+    int params_count = node->params.size();
+
+    if(ImGui::InputInt("Params count", &params_count)) {
+        if(params_count >= 1)
+            node->params.resize(params_count, 0.0f);
         else node->params.clear();
     }
 
     char tmp_buffer[256] = {};
     for(std::size_t i = 0; i < node->params.size(); ++i) {
         std::snprintf(tmp_buffer, sizeof(tmp_buffer), "u_Params[%zu]", i);
-        ImGui::InputFloat(tmp_buffer, &node->params[i]);
+        ImGui::DragFloat(tmp_buffer, &node->params[i], 1.0f, 0.0f, 100.0f);
     }
 }
 
@@ -108,7 +144,11 @@ static void layout_popup_add(void)
     }
 
     if(ImGui::MenuItem("Blank source")) {
-        // TODO: add blank source
+        SrcBlankNode *node = new SrcBlankNode();
+        node->name = "Blank source";
+        node->id = project::random_dev();
+        ImNodes::AutoPositionNode(node);
+        project::tree.insert(node);
     }
 
     if(ImGui::MenuItem("Feedback source")) {
@@ -117,34 +157,37 @@ static void layout_popup_add(void)
 
     ImGui::Separator();
 
-    if(ImGui::MenuItem("Image target")) {
-        // TODO: add image target
-    }
-
-    if(ImGui::MenuItem("Display target")) {
-        TargetImGuiNode *node = new TargetImGuiNode("Display", globals::random_dev());
+    if(ImGui::MenuItem("Display")) {
+        DestDisplayNode *node = new DestDisplayNode();
+        node->name = "Display";
+        node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
-        globals::pr_nodes.insert(node);
+        project::tree.insert(node);
     }
 
     ImGui::Separator();
 
     if(ImGui::MenuItem("Shader pass")) {
-        ShaderPassNode *node = new ShaderPassNode("Shader pass", globals::random_dev());
+        ShaderPassNode *node = new ShaderPassNode();
+        node->name = "Shader pass";
+        node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
-        globals::pr_nodes.insert(node);
+        project::tree.insert(node);
     }
 }
 
 static void layout_popup_node_ops(void)
 {
     if(ImGui::MenuItem("Remove")) {
-        globals::pr_nodes.erase(target_node);
-        delete target_node;
+        if(target_node->get_type() != NODE_DEST_IMAGE) {
+            project::tree.erase(target_node);
+            globals::render_list.erase(target_node);
+            delete target_node;
+        }
     }
 
     if(ImGui::MenuItem("Render")) {
-        target_node->render();
+        globals::render_list.insert(target_node);
     }
 }
 
@@ -160,7 +203,7 @@ void node_edit::layout(void)
     char buffer[256] = {};
 
 
-    if(!ImGui::Begin("Node Editor###NodeEdit_Window")) {
+    if(!ImGui::Begin("Graph Editor###NodeEdit_Window")) {
         ImGui::End();
         return;
     }
@@ -182,17 +225,22 @@ void node_edit::layout(void)
         target_node = nullptr;
     }
     
-    for(Node *node : globals::pr_nodes) {
+    for(BaseNode *node : project::tree) {
         update_input_slots(node);
 
-        if(ImNodes::Ez::BeginNode(node, node->title.c_str(), &node->position, &node->selected)) {
+        if(ImNodes::Ez::BeginNode(node, node->name.c_str(), &node->position, &node->selected)) {
             switch(node->get_type()) {
-                case Node::TARGET_IMGUI:
+                case NODE_DEST_DISPLAY:
                     ImNodes::Ez::InputSlots(input_slots.data(), 1);
-                    layout_target_imgui(static_cast<TargetImGuiNode *>(node));
+                    layout_dest_display(static_cast<DestDisplayNode *>(node));
                     ImNodes::Ez::OutputSlots(nullptr, 0);
                     break;
-                case Node::SHADER_PASS:
+                case NODE_SRC_BLANK:
+                    ImNodes::Ez::InputSlots(nullptr, 0);
+                    layout_src_blank(static_cast<SrcBlankNode *>(node));
+                    ImNodes::Ez::OutputSlots(&output_slot, 1);
+                    break;
+                case NODE_SHADER_PASS:
                     ImNodes::Ez::InputSlots(input_slots.data(), node->inputs.size());
                     layout_shader_pass(static_cast<ShaderPassNode *>(node));
                     ImNodes::Ez::OutputSlots(&output_slot, 1);
@@ -228,13 +276,13 @@ void node_edit::layout(void)
     const char *dst_cstr = nullptr;
 
     if(ImNodes::GetNewConnection(&dst_ptr, &dst_cstr, &src_ptr, &src_cstr)) {
-        Node *src_node = reinterpret_cast<Node *>(src_ptr);
-        Node *dst_node = reinterpret_cast<Node *>(dst_ptr);
+        BaseNode *src_node = reinterpret_cast<BaseNode *>(src_ptr);
+        BaseNode *dst_node = reinterpret_cast<BaseNode *>(dst_ptr);
         std::size_t dst_index = SIZE_MAX;
 
         // ImNodes seems to give us the exact same pointers as
         // the strings in the input_slots[i].title; we can use this
-        // and avoid both string comparison and std::sscanf usage
+        // and avoid both string comparison and/or std::sscanf usage
         for(std::size_t i = 0; i < dst_node->inputs.size(); ++i) {
             if(input_slots[i].title == dst_cstr) {
                 dst_index = i;

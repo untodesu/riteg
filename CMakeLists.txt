@@ -32,16 +32,17 @@ if(NOT glfw3_FOUND)
 endif()
 
 add_executable(riteg
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/node.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/base_node.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/dest_display.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shader_pass.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/target_imgui.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_blank.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/core/globals.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/core/logging.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/menu_bar.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/node_display.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/node_edit.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/style.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/main.cc")
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/main.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/project.cc")
 target_compile_definitions(riteg PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
 target_link_libraries(riteg PRIVATE glad glfw imgui imgui_glfw imgui_opengl3 imnodes)

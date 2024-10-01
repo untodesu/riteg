@@ -3,34 +3,43 @@
 #include "riteg/stdafx.hh"
 #include "riteg/core/globals.hh"
 #include "riteg/gui/menu_bar.hh"
+#include "riteg/project.hh"
+
+static void layout_file_menu(void)
+{
+    ImGui::MenuItem("New", nullptr);
+    ImGui::MenuItem("Open", nullptr);
+    ImGui::Separator();
+
+    ImGui::MenuItem("Save", nullptr);
+    ImGui::MenuItem("Save As", nullptr);
+    ImGui::Separator();
+
+    ImGui::MenuItem("Options", nullptr);
+    ImGui::Separator();
+
+    if(ImGui::MenuItem("Exit", nullptr)) {
+        glfwSetWindowShouldClose(globals::window, true);
+    }
+}
+
+static void layout_view_menu(void)
+{
+    if(ImGui::MenuItem("Restore layout")) {
+        project::restore_layout();
+    }
+}
 
 void menu_bar::layout(void)
 {
     if(ImGui::BeginMainMenuBar()) {
         if(ImGui::BeginMenu("File")) {
-            ImGui::MenuItem("New", nullptr);
-            ImGui::MenuItem("Open", nullptr);
-            ImGui::Separator();
-
-            ImGui::MenuItem("Save", nullptr);
-            ImGui::MenuItem("Save As", nullptr);
-            ImGui::Separator();
-
-            ImGui::MenuItem("Options", nullptr);
-            ImGui::Separator();
-
-            if(ImGui::MenuItem("Exit", nullptr)) {
-                glfwSetWindowShouldClose(globals::window, true);
-            }
-
+            layout_file_menu();
             ImGui::EndMenu();
         }
 
-        if(ImGui::BeginMenu("Edit")) {
-            ImGui::EndMenu();
-        }
-
-        if(ImGui::BeginMenu("Project")) {
+        if(ImGui::BeginMenu("View")) {
+            layout_view_menu();
             ImGui::EndMenu();
         }
 
@@ -41,7 +50,6 @@ void menu_bar::layout(void)
         const ImGuiIO &io = ImGui::GetIO();
         const ImVec2 &vsz = ImGui::GetMainViewport()->Size;
         ImGui::Separator(); ImGui::TextDisabled("%.0fx%.0f % 3.0f FPS", vsz.x, vsz.y, io.Framerate);
-        ImGui::Separator(); ImGui::TextDisabled("FRAME % 6zu/%-6zu", globals::pr_cur_frame, globals::pr_num_frames);
         ImGui::Separator(); ImGui::TextColored(ImVec4(col_r, 1.0f, col_b, 1.0f), "RITEG V2");
 
         ImGui::EndMainMenuBar();

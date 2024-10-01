@@ -1,20 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
 #include "riteg/stdafx.hh"
-#include "riteg/graph/target_imgui.hh"
+#include "riteg/graph/dest_display.hh"
 
-TargetImGuiNode::TargetImGuiNode(const std::string &title, std::size_t id) : Node(title, id)
+DestDisplayNode::DestDisplayNode(void)
 {
     inputs.resize(1, nullptr);
 }
 
-unsigned int TargetImGuiNode::get_type(void) const
+NodeType DestDisplayNode::get_type(void) const
 {
-    return Node::TARGET_IMGUI;
+    return NODE_DEST_DISPLAY;
 }
 
-bool TargetImGuiNode::render(void)
+bool DestDisplayNode::render(void)
 {
+    if(rendered) {
+        return true;
+    }
+
     for(std::size_t i = 0; i < inputs.size(); ++i) {
         if(inputs[i] != nullptr) {
             if(inputs[i]->render())
@@ -23,5 +27,6 @@ bool TargetImGuiNode::render(void)
         }
     }
 
+    rendered = true;
     return true;
 }

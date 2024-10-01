@@ -4,9 +4,10 @@
 #include "riteg/core/globals.hh"
 
 GLFWwindow *globals::window = nullptr;
+ImGuiID globals::dockspace_id = {};
 ImNodes::Ez::Context *globals::imnodes_ctx = nullptr;
-std::mt19937_64 globals::random_dev = {};
 
-std::unordered_set<Node *> globals::pr_nodes = {};
-std::size_t globals::pr_num_frames = SIZE_MAX;
-std::size_t globals::pr_cur_frame = SIZE_MAX;
+GLuint globals::vertex_shader = 0;
+GLuint globals::vertex_array = 0;
+
+std::unordered_set<BaseNode *> globals::render_list = {};
