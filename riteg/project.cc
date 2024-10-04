@@ -17,7 +17,7 @@ void project::open(const std::filesystem::path &directory)
         project::directory = directory;
         project::tree.clear();
 
-        project::imgui_ini_path = project::directory / "imgui.ini";
+        project::imgui_ini_path = std::filesystem::path(project::directory / "imgui.ini").string();
         ImGui::GetIO().IniFilename = project::imgui_ini_path.c_str();
 
         logging::info("project::open: opened %s", directory.string().c_str());

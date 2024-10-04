@@ -36,8 +36,11 @@ CanvasState* gCanvas = nullptr;
 
 bool operator ==(const ImVec2& a, const ImVec2& b)
 {
-    return abs(a.x - b.x) < std::numeric_limits<float>::epsilon() &&
-           abs(a.y - b.y) < std::numeric_limits<float>::epsilon();
+    // RITEG ImNodes patch: Microsoft's STL rendition doesn't support
+    // overloads on C-styled math function calls; since ImVec2 uses floats
+    // it makes sense to just use fabsf instead of a type-generic abs
+    return fabsf(a.x - b.x) < std::numeric_limits<float>::epsilon() &&
+           fabsf(a.y - b.y) < std::numeric_limits<float>::epsilon();
 }
 
 enum _ImNodesState
