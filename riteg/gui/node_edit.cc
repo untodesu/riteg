@@ -168,7 +168,7 @@ static void layout_shader_pass(ShaderPassNode *node)
 
 static void layout_popup_add(void)
 {
-    if(ImGui::MenuItem("Image source")) {
+    if(ImGui::MenuItem("Source - image")) {
         SrcImageNode *node = new SrcImageNode();
         node->name = "Image source";
         node->id = project::random_dev();
@@ -176,7 +176,7 @@ static void layout_popup_add(void)
         project::tree.insert(node);
     }
 
-    if(ImGui::MenuItem("Blank source")) {
+    if(ImGui::MenuItem("Source - blank")) {
         SrcBlankNode *node = new SrcBlankNode();
         node->name = "Blank source";
         node->id = project::random_dev();
@@ -184,15 +184,15 @@ static void layout_popup_add(void)
         project::tree.insert(node);
     }
 
-    if(ImGui::MenuItem("Feedback source")) {
+    if(ImGui::MenuItem("Source - feedback")) {
         // TODO: add feedback source
     }
 
     ImGui::Separator();
 
-    if(ImGui::MenuItem("Display destination")) {
+    if(ImGui::MenuItem("Target - display")) {
         DestDisplayNode *node = new DestDisplayNode();
-        node->name = "Node display";
+        node->name = "Display target";
         node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
         project::tree.insert(node);
@@ -200,9 +200,9 @@ static void layout_popup_add(void)
 
     ImGui::BeginDisabled(project::dest_image != nullptr);
 
-    if(ImGui::MenuItem("Image destination") && !project::dest_image) {
+    if(ImGui::MenuItem("Target - image") && !project::dest_image) {
         DestImageNode *node = new DestImageNode();
-        node->name = "Image destination";
+        node->name = "Image target";
         node->id = static_cast<unsigned long>(0);
         ImNodes::AutoPositionNode(node);
         project::tree.insert(node);
@@ -247,7 +247,6 @@ void node_edit::init(void)
 void node_edit::layout(void)
 {
     char buffer[256] = {};
-
 
     if(!ImGui::Begin("Graph Editor###NodeEdit_Window")) {
         ImGui::End();

@@ -7,22 +7,21 @@
 
 static void layout_general(void)
 {
-    static std::string fixme_string = {};
-    ImGui::InputText("Name", &fixme_string);
+    ImGui::InputText("Description###General_Description", &project::description);
 }
 
 static void layout_input(void)
 {
-    ImGui::Combo("Mode", &input::mode, "disabled\0directory_iterator\0std::sprintf\0");
+    ImGui::Combo("Mode###Input_Mode", &input::mode, "disabled\0directory_iterator\0std::sprintf\0");
 
     ImGui::BeginDisabled(input::mode == INPUT_MODE_NULL);
     std::string input_directory = input::directory.string();
-    ImGui::InputText("Directory", &input_directory);
+    ImGui::InputText("Directory###Input_Directory", &input_directory);
     input::directory = input_directory;
     ImGui::EndDisabled();
 
     ImGui::BeginDisabled(input::mode != INPUT_MODE_STD_SPRINTF);
-    ImGui::InputText("Format", &input::format);
+    ImGui::InputText("Format###Input_Format", &input::format);
     ImGui::EndDisabled();
 
     if(ImGui::Button("Update paths", ImVec2(ImGui::CalcItemWidth(), 0.0f))) {

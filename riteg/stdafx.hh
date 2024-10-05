@@ -30,4 +30,6 @@
 #include <imnodes.h>
 #include <imnodes_ez.h>
 
+#include <parson.h>
+
 #include <stb_image.h>

@@ -14,6 +14,11 @@ extern std::string imgui_ini_path;
 
 namespace project
 {
+extern std::string description;
+} // namespace project
+
+namespace project
+{
 extern std::random_device random_dev;
 extern std::unordered_set<BaseNode *> tree;
 extern DestImageNode *dest_image;
@@ -24,6 +29,11 @@ namespace project
 void open(const std::filesystem::path &directory);
 void close(void);
 void save(void);
+} // namespace project
+
+namespace project
+{
+BaseNode *node_by_id(unsigned long id);
 } // namespace project
 
 namespace project

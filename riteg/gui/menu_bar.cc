@@ -12,7 +12,10 @@ static void layout_file_menu(void)
     ImGui::MenuItem("Open", nullptr);
     ImGui::Separator();
 
-    ImGui::MenuItem("Save", nullptr);
+    if(ImGui::MenuItem("Save", nullptr)) {
+        project::save();
+    }
+
     ImGui::MenuItem("Save As", nullptr);
     ImGui::Separator();
 
