@@ -4,6 +4,7 @@
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
 #include "riteg/graph/base_node.hh"
+#include "riteg/graph/dest_image.hh"
 #include "riteg/project/project.hh"
 
 std::filesystem::path project::directory = {};
@@ -12,6 +13,7 @@ std::string project::imgui_ini_path = {};
 
 std::random_device project::random_dev = {};
 std::unordered_set<BaseNode *> project::tree = {};
+DestImageNode *project::dest_image = nullptr;
 
 void project::open(const std::filesystem::path &directory)
 {

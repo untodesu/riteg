@@ -5,6 +5,7 @@
 #include "riteg/core/logging.hh"
 #include "riteg/graph/base_node.hh"
 #include "riteg/graph/dest_display.hh"
+#include "riteg/graph/dest_image.hh"
 #include "riteg/graph/shader_pass.hh"
 #include "riteg/graph/src_blank.hh"
 #include "riteg/graph/src_image.hh"
@@ -41,6 +42,19 @@ static void update_input_slots(BaseNode *node)
             input_slots[i].title = input_slot_names[i].c_str();
             input_slots[i].kind = DEFAULT_SLOT_KIND;
         }
+    }
+}
+
+static void layout_dest_image(DestImageNode *node)
+{
+    ImGui::InputText("Name", &node->name);
+    ImGui::NewLine();
+
+    if(node->inputs[0] && node->inputs[0]->texture) {
+        const float size = ImGui::CalcItemWidth();
+        ImTextureID texture = reinterpret_cast<ImTextureID>(node->inputs[0]->texture);
+        ImGui::Image(texture, ImVec2(size, size));
+        ImGui::NewLine();
     }
 }
 
@@ -176,13 +190,26 @@ static void layout_popup_add(void)
 
     ImGui::Separator();
 
-    if(ImGui::MenuItem("Display")) {
+    if(ImGui::MenuItem("Display destination")) {
         DestDisplayNode *node = new DestDisplayNode();
-        node->name = "Display";
+        node->name = "Node display";
         node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
         project::tree.insert(node);
     }
+
+    ImGui::BeginDisabled(project::dest_image != nullptr);
+
+    if(ImGui::MenuItem("Image destination") && !project::dest_image) {
+        DestImageNode *node = new DestImageNode();
+        node->name = "Image destination";
+        node->id = static_cast<unsigned long>(0);
+        ImNodes::AutoPositionNode(node);
+        project::tree.insert(node);
+        project::dest_image = node;
+    }
+
+    ImGui::EndDisabled();
 
     ImGui::Separator();
 
@@ -249,6 +276,11 @@ void node_edit::layout(void)
 
         if(ImNodes::Ez::BeginNode(node, node->name.c_str(), &node->position, &node->selected)) {
             switch(node->get_type()) {
+                case NODE_DEST_IMAGE:
+                    ImNodes::Ez::InputSlots(input_slots.data(), 1);
+                    layout_dest_image(static_cast<DestImageNode *>(node));
+                    ImNodes::Ez::OutputSlots(nullptr, 0);
+                    break;
                 case NODE_DEST_DISPLAY:
                     ImNodes::Ez::InputSlots(input_slots.data(), 1);
                     layout_dest_display(static_cast<DestDisplayNode *>(node));

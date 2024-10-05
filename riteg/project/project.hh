@@ -3,6 +3,7 @@
 #pragma once
 
 class BaseNode;
+class DestImageNode;
 
 namespace project
 {
@@ -15,6 +16,7 @@ namespace project
 {
 extern std::random_device random_dev;
 extern std::unordered_set<BaseNode *> tree;
+extern DestImageNode *dest_image;
 } // namespace project
 
 namespace project

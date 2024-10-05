@@ -35,6 +35,7 @@ endif()
 add_executable(riteg
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/base_node.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/dest_display.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/dest_image.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shader_pass.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_blank.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_image.cc"
