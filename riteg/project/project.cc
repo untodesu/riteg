@@ -15,7 +15,6 @@
 
 std::filesystem::path project::directory = {};
 std::filesystem::path project::json_path = {};
-std::string project::imgui_ini_path = {};
 
 std::string project::description = {};
 
@@ -379,13 +378,25 @@ static bool write_json(void)
     return true;
 }
 
+void project::create(const std::filesystem::path &directory)
+{
+    std::error_code dummy = {};
+    std::filesystem::create_directories(directory, dummy);
+
+    project::directory = directory;
+    project::json_path = std::filesystem::path(project::directory / "riteg.json");
+
+    project::tree.clear();
+    project::dest_image = nullptr;
+
+    logging::info("project::create: created %s", directory.generic_string().c_str());
+}
+
 void project::open(const std::filesystem::path &directory)
 {
     if(std::filesystem::is_directory(directory)) {
         project::directory = directory;
         project::json_path = std::filesystem::path(project::directory / "riteg.json");
-        project::imgui_ini_path = std::filesystem::path(project::directory / "imgui.ini").string();
-        ImGui::GetIO().IniFilename = project::imgui_ini_path.c_str();
 
         project::tree.clear();
 
@@ -408,8 +419,6 @@ void project::close(void)
 {
     project::directory = std::filesystem::path();
     project::json_path = std::filesystem::path();
-    project::imgui_ini_path = std::string();
-    ImGui::GetIO().IniFilename = nullptr;
 
     project::tree.clear();
 }

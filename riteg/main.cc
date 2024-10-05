@@ -11,6 +11,8 @@
 #include "riteg/gui/style.hh"
 #include "riteg/project/project.hh"
 
+#include "font/anonymous-pro-regular.h"
+
 #if defined(_WIN32)
 extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -131,13 +133,18 @@ int main(void)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.IniFilename = nullptr;
+
+    io.Fonts->Clear();
+    io.Fonts->AddFontFromMemoryCompressedTTF(AnynymousProRegular_compressed_data, AnynymousProRegular_compressed_size, 18.0f);
+    io.FontDefault = io.Fonts->Fonts[0];
 
     style::apply_imgui();
     style::apply_imnodes();
 
     node_edit::init();
 
-    project::open(std::filesystem::current_path() / "project");
+    project::close();
 
     while(!glfwWindowShouldClose(globals::window)) {
         for(BaseNode *node : project::tree) {
@@ -156,12 +163,11 @@ int main(void)
 
         menu_bar::layout();
 
-        project_edit::layout();
-        frame_select::layout();
-
-        node_edit::layout();
-
-        ImGui::ShowDemoWindow();
+        if(!project::directory.empty()) {
+            project_edit::layout();
+            frame_select::layout();
+            node_edit::layout();
+        }
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

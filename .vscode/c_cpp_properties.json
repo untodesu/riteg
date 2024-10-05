@@ -14,6 +14,7 @@
                 "${workspaceFolder}/deps/imnodes/include",
                 "${workspaceFolder}/deps/parson/include",
                 "${workspaceFolder}/deps/stb/include",
+                "${workspaceFolder}/deps/tinyfiledialogs/include",
                 "${workspaceFolder}",
                 "${default}"
             ]

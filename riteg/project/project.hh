@@ -9,7 +9,6 @@ namespace project
 {
 extern std::filesystem::path directory;
 extern std::filesystem::path json_path;
-extern std::string imgui_ini_path;
 } // namespace project
 
 namespace project
@@ -26,6 +25,7 @@ extern DestImageNode *dest_image;
 
 namespace project
 {
+void create(const std::filesystem::path &directory);
 void open(const std::filesystem::path &directory);
 void close(void);
 void save(void);

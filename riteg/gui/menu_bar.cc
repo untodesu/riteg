@@ -6,21 +6,41 @@
 #include "riteg/project/input.hh"
 #include "riteg/project/project.hh"
 
+constexpr static const char *FILTER_STR = "riteg.json";
+
 static void layout_file_menu(void)
 {
-    ImGui::MenuItem("New", nullptr);
-    ImGui::MenuItem("Open", nullptr);
+    if(ImGui::MenuItem("New project", nullptr)) {
+        if(const char *directory = tinyfd_selectFolderDialog("New Project", nullptr)) {
+            project::create(std::filesystem::path(directory));
+            project::restore_layout();
+        }
+    }
+
+    if(ImGui::MenuItem("Open project", nullptr)) {
+        if(const char *path = tinyfd_openFileDialog("Open Project", nullptr, 1, &FILTER_STR, FILTER_STR, 0)) {
+            project::open(std::filesystem::path(path).parent_path());
+            project::restore_layout();
+        }
+    }
+
     ImGui::Separator();
 
-    if(ImGui::MenuItem("Save", nullptr)) {
+    ImGui::BeginDisabled(project::directory.empty());
+    if(ImGui::MenuItem("Save project", nullptr))
+        project::save();
+    ImGui::EndDisabled();
+
+    ImGui::Separator();
+
+    ImGui::BeginDisabled(project::directory.empty());
+
+    if(ImGui::MenuItem("Save and exit", nullptr)) {
+        glfwSetWindowShouldClose(globals::window, true);
         project::save();
     }
 
-    ImGui::MenuItem("Save As", nullptr);
-    ImGui::Separator();
-
-    ImGui::MenuItem("Options", nullptr);
-    ImGui::Separator();
+    ImGui::EndDisabled();
 
     if(ImGui::MenuItem("Exit", nullptr)) {
         glfwSetWindowShouldClose(globals::window, true);
