@@ -3,10 +3,10 @@
 #pragma once
 #include "riteg/graph/base_node.hh"
 
-class ShaderPassNode final : public BaseNode {
+class GLSLShaderNode final : public BaseNode {
 public:
-    explicit ShaderPassNode(void);
-    virtual ~ShaderPassNode(void);
+    explicit GLSLShaderNode(void);
+    virtual ~GLSLShaderNode(void);
     virtual NodeType get_type(void) const override;
     virtual bool render(void) override;
 

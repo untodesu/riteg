@@ -2,6 +2,7 @@
 // Copyright (C) 2024, untodesu
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>

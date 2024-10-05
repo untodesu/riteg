@@ -6,7 +6,8 @@
 #include "riteg/graph/base_node.hh"
 #include "riteg/graph/dest_display.hh"
 #include "riteg/graph/dest_image.hh"
-#include "riteg/graph/shader_pass.hh"
+#include "riteg/graph/glsl_shader.hh"
+#include "riteg/graph/shadertoy.hh"
 #include "riteg/graph/src_blank.hh"
 #include "riteg/graph/src_image.hh"
 #include "riteg/gui/node_edit.hh"
@@ -94,7 +95,7 @@ static void layout_src_image(SrcImageNode *node)
     }
 }
 
-static void layout_shader_pass(ShaderPassNode *node)
+static void layout_glsl_shader(GLSLShaderNode *node)
 {
     ImGui::InputText("Name", &node->name);
     ImGui::NewLine();
@@ -166,6 +167,48 @@ static void layout_shader_pass(ShaderPassNode *node)
     }
 }
 
+static void layout_shadertoy(ShadertoyNode *node)
+{
+    ImGui::InputText("Name", &node->name);
+    ImGui::NewLine();
+
+    int texture_size[2] = {};
+    texture_size[0] = node->texture_width;
+    texture_size[1] = node->texture_height;
+
+    if(!node->texture_width || !node->texture_height || ImGui::DragInt2("Output size", texture_size, 1.0f, 1, 4096)) {
+        node->texture_width = texture_size[0] ? texture_size[0] : 1;
+        node->texture_height = texture_size[1] ? texture_size[1] : 1;
+        node->update_texture();
+    }
+
+    if(ImGui::InputText("Shader", &node->shader_path)) {
+        node->update_shader();
+        node->update_uniforms();
+    }
+    
+    if(!node->shader_info_log.empty() || !node->program_info_log.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("[!!!]");
+        if(ImGui::BeginItemTooltip()) {
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+            if(!node->shader_info_log.empty())
+                ImGui::TextUnformatted(node->shader_info_log.c_str());
+            if(!node->program_info_log.empty())
+                ImGui::TextUnformatted(node->program_info_log.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
+    }
+
+    if(ImGui::Button("Force recompile", ImVec2(ImGui::CalcItemWidth(), 0.0f))) {
+        node->update_shader();
+        node->update_uniforms();
+    }
+
+    ImGui::NewLine();
+}
+
 static void layout_popup_add(void)
 {
     if(ImGui::MenuItem("Source - image")) {
@@ -213,9 +256,17 @@ static void layout_popup_add(void)
 
     ImGui::Separator();
 
-    if(ImGui::MenuItem("Shader pass")) {
-        ShaderPassNode *node = new ShaderPassNode();
-        node->name = "Shader pass";
+    if(ImGui::MenuItem("Shader - GLSL")) {
+        GLSLShaderNode *node = new GLSLShaderNode();
+        node->name = "GLSL shader";
+        node->id = project::random_dev();
+        ImNodes::AutoPositionNode(node);
+        project::tree.insert(node);
+    }
+
+    if(ImGui::MenuItem("Shader - Shadertoy")) {
+        ShadertoyNode *node = new ShadertoyNode();
+        node->name = "Shadertoy shader";
         node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
         project::tree.insert(node);
@@ -225,11 +276,11 @@ static void layout_popup_add(void)
 static void layout_popup_node_ops(void)
 {
     if(ImGui::MenuItem("Remove")) {
-        if(target_node->get_type() != NODE_DEST_IMAGE) {
-            project::tree.erase(target_node);
-            globals::render_list.erase(target_node);
-            delete target_node;
-        }
+        if(target_node->get_type() == NODE_DEST_IMAGE)
+            project::dest_image = nullptr;
+        project::tree.erase(target_node);
+        globals::render_list.erase(target_node);
+        delete target_node;
     }
 
     if(ImGui::MenuItem("Render")) {
@@ -295,9 +346,14 @@ void node_edit::layout(void)
                     layout_src_image(static_cast<SrcImageNode *>(node));
                     ImNodes::Ez::OutputSlots(&output_slot, 1);
                     break;
-                case NODE_SHADER_PASS:
+                case NODE_GLSL_SHADER:
                     ImNodes::Ez::InputSlots(input_slots.data(), node->inputs.size());
-                    layout_shader_pass(static_cast<ShaderPassNode *>(node));
+                    layout_glsl_shader(static_cast<GLSLShaderNode *>(node));
+                    ImNodes::Ez::OutputSlots(&output_slot, 1);
+                    break;
+                case NODE_SHADERTOY:
+                    ImNodes::Ez::InputSlots(input_slots.data(), node->inputs.size());
+                    layout_shadertoy(static_cast<ShadertoyNode *>(node));
                     ImNodes::Ez::OutputSlots(&output_slot, 1);
                     break;
                 default:

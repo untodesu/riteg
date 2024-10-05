@@ -3,27 +3,27 @@
 #include "riteg/stdafx.hh"
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
-#include "riteg/graph/shader_pass.hh"
+#include "riteg/graph/glsl_shader.hh"
 #include "riteg/project/project.hh"
 
-ShaderPassNode::ShaderPassNode(void)
+GLSLShaderNode::GLSLShaderNode(void)
 {
     inputs.resize(1, nullptr);
 }
 
-ShaderPassNode::~ShaderPassNode(void)
+GLSLShaderNode::~GLSLShaderNode(void)
 {
     glDeleteTextures(1, &texture);
     glDeleteFramebuffers(1, &fbo);
     glDeleteProgram(program);
 }
 
-NodeType ShaderPassNode::get_type(void) const
+NodeType GLSLShaderNode::get_type(void) const
 {
-    return NODE_SHADER_PASS;
+    return NODE_GLSL_SHADER;
 }
 
-bool ShaderPassNode::render(void)
+bool GLSLShaderNode::render(void)
 {
     if(rendered) {
         return true;
@@ -49,7 +49,7 @@ bool ShaderPassNode::render(void)
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        logging::warn("ShaderPassNode::render: Framebuffer is not complete");
+        logging::warn("GLSLShaderNode::render: Framebuffer is not complete");
         return false;
     }
 
@@ -71,7 +71,7 @@ bool ShaderPassNode::render(void)
     return true;
 }
 
-void ShaderPassNode::update_shader(void)
+void GLSLShaderNode::update_shader(void)
 {
     if(shader_path.empty()) {
         // Don't do anything if
@@ -149,7 +149,7 @@ void ShaderPassNode::update_shader(void)
     }
 }
 
-void ShaderPassNode::update_texture(void)
+void GLSLShaderNode::update_texture(void)
 {
     if(!texture)
         glGenTextures(1, &texture);
@@ -161,7 +161,7 @@ void ShaderPassNode::update_texture(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
-void ShaderPassNode::update_uniforms(void)
+void GLSLShaderNode::update_uniforms(void)
 {
     if(program) {
         u_inputs.clear();

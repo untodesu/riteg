@@ -6,7 +6,8 @@
 #include "riteg/graph/base_node.hh"
 #include "riteg/graph/dest_display.hh"
 #include "riteg/graph/dest_image.hh"
-#include "riteg/graph/shader_pass.hh"
+#include "riteg/graph/glsl_shader.hh"
+#include "riteg/graph/shadertoy.hh"
 #include "riteg/graph/src_blank.hh"
 #include "riteg/graph/src_image.hh"
 #include "riteg/project/input.hh"
@@ -116,25 +117,48 @@ static bool parse_json(void)
             continue;
         }
 
-        if(!std::string("shader_pass").compare(type_str)) {
-            ShaderPassNode *shader_pass = new ShaderPassNode();
-            shader_pass->id = id;
-            shader_pass->name = std::string(name_str);
-            shader_pass->position.x = json_array_get_number(position, 0);
-            shader_pass->position.y = json_array_get_number(position, 1);
+        if(!std::string("glsl_shader").compare(type_str)) {
+            GLSLShaderNode *glsl_shader = new GLSLShaderNode();
+            glsl_shader->id = id;
+            glsl_shader->name = std::string(name_str);
+            glsl_shader->position.x = json_array_get_number(position, 0);
+            glsl_shader->position.y = json_array_get_number(position, 1);
             if(const char *shader_str = json_object_get_string(node, "shader"))
-                shader_pass->shader_path = std::string(shader_str);
-            shader_pass->texture_width = json_array_get_number(texture_size, 0);
-            shader_pass->texture_height = json_array_get_number(texture_size, 1);
+                glsl_shader->shader_path = std::string(shader_str);
+            glsl_shader->texture_width = json_array_get_number(texture_size, 0);
+            glsl_shader->texture_height = json_array_get_number(texture_size, 1);
 
             if(const JSON_Array *params = json_object_get_array(node, "params")) {
                 const std::size_t params_count = json_array_get_count(params);
                 for(std::size_t j = 0; j < params_count; ++j) {
-                    shader_pass->params.push_back(json_array_get_number(params, j));
+                    glsl_shader->params.push_back(json_array_get_number(params, j));
                 }
             }
 
-            project::tree.insert(shader_pass);
+            glsl_shader->update_shader();
+            glsl_shader->update_uniforms();
+            glsl_shader->update_texture();
+
+            project::tree.insert(glsl_shader);
+            continue;
+        }
+
+        if(!std::string("shadertoy").compare(type_str)) {
+            ShadertoyNode *shadertoy = new ShadertoyNode();
+            shadertoy->id = id;
+            shadertoy->name = std::string(name_str);
+            shadertoy->position.x = json_array_get_number(position, 0);
+            shadertoy->position.y = json_array_get_number(position, 1);
+            if(const char *shader_str = json_object_get_string(node, "shader"))
+                shadertoy->shader_path = std::string(shader_str);
+            shadertoy->texture_width = json_array_get_number(texture_size, 0);
+            shadertoy->texture_height = json_array_get_number(texture_size, 1);
+
+            shadertoy->update_shader();
+            shadertoy->update_uniforms();
+            shadertoy->update_texture();
+
+            project::tree.insert(shadertoy);
             continue;
         }
 
@@ -242,7 +266,9 @@ static bool write_json(void)
         JSON_Array *inputs = json_value_get_array(inputsv);
 
         for(BaseNode *input : node->inputs) {
-            json_array_append_number(inputs, input->id);
+            if(input == nullptr)
+                json_array_append_number(inputs, ULONG_MAX);
+            else json_array_append_number(inputs, input->id);
         }
 
         json_object_set_number(obj, "id", node->id);
@@ -266,25 +292,40 @@ static bool write_json(void)
             continue;
         }
 
-        if(type == NODE_SHADER_PASS) {
-            ShaderPassNode *shader_pass = static_cast<ShaderPassNode *>(node);
-            json_object_set_string(obj, "type", "shader_pass");
-            json_object_set_string(obj, "shader", shader_pass->shader_path.c_str());
+        if(type == NODE_GLSL_SHADER) {
+            GLSLShaderNode *glsl_shader = static_cast<GLSLShaderNode *>(node);
+            json_object_set_string(obj, "type", "glsl_shader");
+            json_object_set_string(obj, "shader", glsl_shader->shader_path.c_str());
 
             JSON_Value *texturesizev = json_value_init_array();
             JSON_Array *texturesize = json_value_get_array(texturesizev);
-            json_array_append_number(texturesize, shader_pass->texture_width);
-            json_array_append_number(texturesize, shader_pass->texture_height);
+            json_array_append_number(texturesize, glsl_shader->texture_width);
+            json_array_append_number(texturesize, glsl_shader->texture_height);
             json_object_set_value(obj, "texture_size", texturesizev);
 
             JSON_Value *paramsv = json_value_init_array();
             JSON_Array *params = json_value_get_array(paramsv);
 
-            for(float param : shader_pass->params) {
+            for(float param : glsl_shader->params) {
                 json_array_append_number(params, param);
             }
 
             json_object_set_value(obj, "params", paramsv);
+
+            json_array_append_value(tree, nodev);
+            continue;
+        }
+
+        if(type == NODE_SHADERTOY) {
+            ShadertoyNode *shadertoy = static_cast<ShadertoyNode *>(node);
+            json_object_set_string(obj, "type", "shadertoy");
+            json_object_set_string(obj, "shader", shadertoy->shader_path.c_str());
+
+            JSON_Value *texturesizev = json_value_init_array();
+            JSON_Array *texturesize = json_value_get_array(texturesizev);
+            json_array_append_number(texturesize, shadertoy->texture_width);
+            json_array_append_number(texturesize, shadertoy->texture_height);
+            json_object_set_value(obj, "texture_size", texturesizev);
 
             json_array_append_value(tree, nodev);
             continue;
