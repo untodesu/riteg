@@ -6,9 +6,14 @@ class BaseNode;
 
 namespace project
 {
-extern std::string imgui_ini_path;
-extern std::random_device random_dev;
 extern std::filesystem::path directory;
+extern std::filesystem::path json_path;
+extern std::string imgui_ini_path;
+} // namespace project
+
+namespace project
+{
+extern std::random_device random_dev;
 extern std::unordered_set<BaseNode *> tree;
 } // namespace project
 

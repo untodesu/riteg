@@ -5,6 +5,7 @@
 
 class ShaderPassNode final : public BaseNode {
 public:
+    explicit ShaderPassNode(void);
     virtual ~ShaderPassNode(void);
     virtual NodeType get_type(void) const override;
     virtual bool render(void) override;

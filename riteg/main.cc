@@ -4,10 +4,12 @@
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
 #include "riteg/graph/dest_display.hh"
+#include "riteg/gui/frame_select.hh"
 #include "riteg/gui/menu_bar.hh"
 #include "riteg/gui/node_edit.hh"
+#include "riteg/gui/project_edit.hh"
 #include "riteg/gui/style.hh"
-#include "riteg/project.hh"
+#include "riteg/project/project.hh"
 
 #if defined(_WIN32)
 extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -153,11 +155,11 @@ int main(void)
         globals::dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
         menu_bar::layout();
-        node_edit::layout();
 
-        if(ImGui::Begin("Style Edit###StyleEdit_Window"))
-            ImGui::ShowStyleEditor();
-        ImGui::End();
+        project_edit::layout();
+        frame_select::layout();
+
+        node_edit::layout();
 
         ImGui::ShowDemoWindow();
 

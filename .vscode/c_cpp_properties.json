@@ -12,6 +12,7 @@
                 "${workspaceFolder}/deps/glad/include",
                 "${workspaceFolder}/deps/imgui/include",
                 "${workspaceFolder}/deps/imnodes/include",
+                "${workspaceFolder}/deps/stb/include",
                 "${workspaceFolder}",
                 "${default}"
             ]

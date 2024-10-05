@@ -3,7 +3,8 @@
 #include "riteg/stdafx.hh"
 #include "riteg/core/globals.hh"
 #include "riteg/gui/menu_bar.hh"
-#include "riteg/project.hh"
+#include "riteg/project/input.hh"
+#include "riteg/project/project.hh"
 
 static void layout_file_menu(void)
 {
@@ -50,6 +51,7 @@ void menu_bar::layout(void)
         const ImGuiIO &io = ImGui::GetIO();
         const ImVec2 &vsz = ImGui::GetMainViewport()->Size;
         ImGui::Separator(); ImGui::TextDisabled("%.0fx%.0f % 3.0f FPS", vsz.x, vsz.y, io.Framerate);
+        ImGui::Separator(); ImGui::TextDisabled("FRAME % 5zu/%-5zu", input::path_index + 1, input::paths.size());
         ImGui::Separator(); ImGui::TextColored(ImVec4(col_r, 1.0f, col_b, 1.0f), "RITEG V2");
 
         ImGui::EndMainMenuBar();

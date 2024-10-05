@@ -14,6 +14,7 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(deps/glad)
 add_subdirectory(deps/imgui)
 add_subdirectory(deps/imnodes)
+add_subdirectory(deps/stb)
 find_package(glfw3 QUIET)
 
 if(NOT glfw3_FOUND)
@@ -36,14 +37,18 @@ add_executable(riteg
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/dest_display.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shader_pass.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_blank.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_image.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/core/globals.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/core/logging.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/frame_select.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/menu_bar.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/node_edit.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/project_edit.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/style.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/main.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/project.cc")
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/project/input.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/project/project.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/main.cc")
 target_compile_definitions(riteg PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
-target_link_libraries(riteg PRIVATE glad glfw imgui imgui_glfw imgui_opengl3 imnodes)
+target_link_libraries(riteg PRIVATE glad glfw imgui imgui_glfw imgui_opengl3 imnodes stb)
 target_precompile_headers(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}/riteg/stdafx.hh")

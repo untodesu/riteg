@@ -4,7 +4,12 @@
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
 #include "riteg/graph/shader_pass.hh"
-#include "riteg/project.hh"
+#include "riteg/project/project.hh"
+
+ShaderPassNode::ShaderPassNode(void)
+{
+    inputs.resize(1, nullptr);
+}
 
 ShaderPassNode::~ShaderPassNode(void)
 {

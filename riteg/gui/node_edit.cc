@@ -7,8 +7,9 @@
 #include "riteg/graph/dest_display.hh"
 #include "riteg/graph/shader_pass.hh"
 #include "riteg/graph/src_blank.hh"
+#include "riteg/graph/src_image.hh"
 #include "riteg/gui/node_edit.hh"
-#include "riteg/project.hh"
+#include "riteg/project/project.hh"
 
 // All nodes share exact same slot kind
 constexpr static int DEFAULT_SLOT_KIND = 42;
@@ -63,6 +64,20 @@ static void layout_src_blank(SrcBlankNode *node)
     ImGui::NewLine();
     ImGui::ColorPicker4("Color", &node->color.x);
     ImGui::NewLine();
+}
+
+static void layout_src_image(SrcImageNode *node)
+{
+    ImGui::InputText("Name", &node->name);
+    ImGui::Checkbox("Enable display", &node->enable_display);
+    ImGui::NewLine();
+
+    if(node->texture && node->enable_display) {
+        const float size = ImGui::CalcItemWidth();
+        ImTextureID texture = reinterpret_cast<ImTextureID>(node->texture);
+        ImGui::Image(texture, ImVec2(size, size));
+        ImGui::NewLine();
+    }
 }
 
 static void layout_shader_pass(ShaderPassNode *node)
@@ -140,7 +155,11 @@ static void layout_shader_pass(ShaderPassNode *node)
 static void layout_popup_add(void)
 {
     if(ImGui::MenuItem("Image source")) {
-        // TODO: add image source
+        SrcImageNode *node = new SrcImageNode();
+        node->name = "Image source";
+        node->id = project::random_dev();
+        ImNodes::AutoPositionNode(node);
+        project::tree.insert(node);
     }
 
     if(ImGui::MenuItem("Blank source")) {
@@ -238,6 +257,11 @@ void node_edit::layout(void)
                 case NODE_SRC_BLANK:
                     ImNodes::Ez::InputSlots(nullptr, 0);
                     layout_src_blank(static_cast<SrcBlankNode *>(node));
+                    ImNodes::Ez::OutputSlots(&output_slot, 1);
+                    break;
+                case NODE_SRC_IMAGE:
+                    ImNodes::Ez::InputSlots(nullptr, 0);
+                    layout_src_image(static_cast<SrcImageNode *>(node));
                     ImNodes::Ez::OutputSlots(&output_slot, 1);
                     break;
                 case NODE_SHADER_PASS:

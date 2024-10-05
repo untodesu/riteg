@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
@@ -29,4 +30,4 @@
 #include <imnodes.h>
 #include <imnodes_ez.h>
 
-namespace fs = std::filesystem;
+#include <stb_image.h>
