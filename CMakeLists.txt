@@ -48,6 +48,7 @@ add_executable(riteg
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/menu_bar.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/node_edit.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/project_edit.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/shader_files.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/style.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/project/input.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/project/project.cc"

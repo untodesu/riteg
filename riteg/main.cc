@@ -8,6 +8,7 @@
 #include "riteg/gui/menu_bar.hh"
 #include "riteg/gui/node_edit.hh"
 #include "riteg/gui/project_edit.hh"
+#include "riteg/gui/shader_files.hh"
 #include "riteg/gui/style.hh"
 #include "riteg/project/project.hh"
 
@@ -164,6 +165,7 @@ int main(void)
         menu_bar::layout();
 
         if(!project::directory.empty()) {
+            shader_files::layout();
             project_edit::layout();
             frame_select::layout();
             node_edit::layout();

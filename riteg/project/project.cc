@@ -10,6 +10,7 @@
 #include "riteg/graph/shadertoy.hh"
 #include "riteg/graph/src_blank.hh"
 #include "riteg/graph/src_image.hh"
+#include "riteg/gui/shader_files.hh"
 #include "riteg/project/input.hh"
 #include "riteg/project/project.hh"
 
@@ -389,6 +390,8 @@ void project::create(const std::filesystem::path &directory)
     project::tree.clear();
     project::dest_image = nullptr;
 
+    shader_files::refresh();
+
     logging::info("project::create: created %s", directory.generic_string().c_str());
 }
 
@@ -401,6 +404,7 @@ void project::open(const std::filesystem::path &directory)
         project::tree.clear();
 
         if(parse_json()) {
+            shader_files::refresh();
             logging::info("project::open: opened %s", directory.generic_string().c_str());
             return;
         }
@@ -458,6 +462,7 @@ void project::restore_layout(void)
 
     ImGui::DockBuilderDockWindow("###ProjectEdit_Window", left);
     ImGui::DockBuilderDockWindow("###FrameSelect_Window", left_down);
+    ImGui::DockBuilderDockWindow("###ShaderFiles_Window", left_down);
     ImGui::DockBuilderDockWindow("###NodeEdit_Window", globals::dockspace_id);
     ImGui::DockBuilderFinish(globals::dockspace_id);
 }
