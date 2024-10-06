@@ -1,0 +1,23 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Voxelius [linux, x86-64]",
+            "cppStandard": "c++17",
+            "cStandard": "c99",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerPath": "/usr/bin/g++",
+            "defines": ["GLFW_INCLUDE_NONE", "IMGUI_DEFINE_MATH_OPERATORS"],
+            "includePath": [
+                "${workspaceFolder}/deps/glad/include",
+                "${workspaceFolder}/deps/imgui/include",
+                "${workspaceFolder}/deps/imnodes/include",
+                "${workspaceFolder}/deps/parson/include",
+                "${workspaceFolder}/deps/stb/include",
+                "${workspaceFolder}/deps/tinyfiledialogs/include",
+                "${workspaceFolder}",
+                "${default}"
+            ]
+        }
+    ]
+}
