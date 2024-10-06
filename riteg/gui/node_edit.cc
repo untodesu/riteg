@@ -391,7 +391,7 @@ void node_edit::layout(void)
         BaseNode *dst_node = reinterpret_cast<BaseNode *>(dst_ptr);
         std::size_t dst_index = SIZE_MAX;
 
-        if(!dst_node->trace_path(src_node)) {
+        if(!src_node->trace_backwards(dst_node) && !dst_node->trace_forwards(src_node)) {
             // ImNodes seems to give us the exact same pointers as
             // the strings in the input_slots[i].title; we can use this
             // and avoid both string comparison and/or std::sscanf usage
@@ -403,6 +403,8 @@ void node_edit::layout(void)
             }
 
             if(dst_index < dst_node->inputs.size()) {
+                if(dst_node->inputs[dst_index])
+                    dst_node->inputs[dst_index]->outputs.erase(dst_node);
                 dst_node->inputs[dst_index] = src_node;
                 src_node->outputs.insert(dst_node);
             }

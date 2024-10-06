@@ -50,8 +50,3 @@ bool BaseNode::trace_forwards(const BaseNode *target) const
 
     return true;
 }
-
-bool BaseNode::trace_path(const BaseNode *target) const
-{
-    return trace_backwards(target) || trace_forwards(target);
-}

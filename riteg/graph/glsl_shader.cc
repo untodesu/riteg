@@ -60,7 +60,7 @@ bool GLSLShaderNode::render(void)
     std::vector<std::array<GLfloat, 2>> resolutions = {};
     std::vector<GLint> samplers = {};
 
-    samplers.resize(inputs.size(), (-1));
+    samplers.resize(inputs.size(), 0);
     resolutions.resize(inputs.size(), {0.0f, 0.0f});
 
     for(std::size_t i = 0; i < inputs.size(); ++i) {
