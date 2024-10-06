@@ -9,7 +9,6 @@
 
 constexpr static const char *shader_prefix = R"glsl(
     #version 330 core
-    out vec4 shadertoy_Output;
     uniform sampler2D iChannel0;
     uniform sampler2D iChannel1;
     uniform sampler2D iChannel2;
@@ -24,6 +23,7 @@ constexpr static const char *shader_prefix = R"glsl(
 )glsl";
 
 constexpr static const char *shader_postfix = R"glsl(
+    out vec4 shadertoy_Output;
     void main(void)
     {
         mainImage(shadertoy_Output, gl_FragCoord.xy);
@@ -38,7 +38,7 @@ ShadertoyNode::ShadertoyNode(void)
 ShadertoyNode::~ShadertoyNode(void)
 {
     glDeleteTextures(1, &texture);
-    glDeleteFramebuffers(1, &fbo);
+    glDeleteFramebuffers(1, &framebuffer);
     glDeleteProgram(program);
 }
 
@@ -50,7 +50,7 @@ NodeType ShadertoyNode::get_type(void) const
 bool ShadertoyNode::render(void)
 {
     if(rendered) {
-        return true;
+        return false;
     }
 
     if(inputs[0] && !inputs[0]->render())
@@ -68,15 +68,19 @@ bool ShadertoyNode::render(void)
         return false;
     }
 
-    if(!fbo)
-        glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    if(!framebuffer)
+        glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         logging::warn("ShadertoyNode::render: Framebuffer is not complete");
         return false;
     }
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glViewport(0, 0, texture_width, texture_height);
+    glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(program);
 
@@ -160,8 +164,8 @@ void ShadertoyNode::update_shader(void)
     std::ifstream stream = std::ifstream(path);
 
     if(!stream.is_open()) {
-        shader_info_log = "Unable to open shader file";
-        program_info_log = std::basic_string<GLchar>(path.string());
+        info_log_shader = "Unable to open shader file";
+        info_log_program = std::basic_string<GLchar>(path.string());
         return;
     }
 
@@ -178,15 +182,15 @@ void ShadertoyNode::update_shader(void)
     glShaderSource(fragment_shader, 3, source_cstr, nullptr);
     glCompileShader(fragment_shader);
 
-    shader_info_log.clear();
-    program_info_log.clear();
+    info_log_shader.clear();
+    info_log_program.clear();
 
-    GLint shader_info_log_length = {};
-    glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &shader_info_log_length);    
+    GLint info_log_length_shader = {};
+    glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &info_log_length_shader);    
 
-    if(shader_info_log_length > 0) {
-        shader_info_log.resize(shader_info_log_length);
-        glGetShaderInfoLog(fragment_shader, shader_info_log_length, nullptr, shader_info_log.data());
+    if(info_log_length_shader > 0) {
+        info_log_shader.resize(info_log_length_shader);
+        glGetShaderInfoLog(fragment_shader, info_log_length_shader, nullptr, info_log_shader.data());
     }
 
     GLint compile_status = {};
@@ -204,12 +208,12 @@ void ShadertoyNode::update_shader(void)
 
     glDeleteShader(fragment_shader);
 
-    GLint program_info_log_length = {};
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &program_info_log_length);
+    GLint info_log_length_program = {};
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_log_length_program);
 
-    if(program_info_log_length > 0) {
-        program_info_log.resize(program_info_log_length);
-        glGetProgramInfoLog(program, program_info_log_length, nullptr, program_info_log.data());
+    if(info_log_length_program > 0) {
+        info_log_program.resize(info_log_length_program);
+        glGetProgramInfoLog(program, info_log_length_program, nullptr, info_log_program.data());
     }
 
     GLint link_status = {};

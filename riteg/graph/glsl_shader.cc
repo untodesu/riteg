@@ -14,7 +14,7 @@ GLSLShaderNode::GLSLShaderNode(void)
 GLSLShaderNode::~GLSLShaderNode(void)
 {
     glDeleteTextures(1, &texture);
-    glDeleteFramebuffers(1, &fbo);
+    glDeleteFramebuffers(1, &framebuffer);
     glDeleteProgram(program);
 }
 
@@ -26,7 +26,7 @@ NodeType GLSLShaderNode::get_type(void) const
 bool GLSLShaderNode::render(void)
 {
     if(rendered) {
-        return true;
+        return false;
     }
 
     for(std::size_t i = 0; i < inputs.size(); ++i) {
@@ -43,9 +43,9 @@ bool GLSLShaderNode::render(void)
         return false;
     }
 
-    if(!fbo)
-        glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    if(!framebuffer)
+        glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
 
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -53,16 +53,36 @@ bool GLSLShaderNode::render(void)
         return false;
     }
 
-    glUseProgram(program);
-    glUniform2f(u_resolution, texture_width, texture_height);
-    glUniform1f(u_time, static_cast<float>(glfwGetTime()));
-    glUniform1fv(u_params, params.size(), params.data());
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glViewport(0, 0, texture_width, texture_height);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    std::vector<std::array<GLfloat, 2>> resolutions = {};
+    std::vector<GLint> samplers = {};
+
+    samplers.resize(inputs.size(), (-1));
+    resolutions.resize(inputs.size(), {0.0f, 0.0f});
 
     for(std::size_t i = 0; i < inputs.size(); ++i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, inputs[i] ? inputs[i]->texture : 0);
-        glUniform1i(u_inputs[i], i);
+        if(inputs[i] != nullptr) {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(GL_TEXTURE_2D, inputs[i]->texture);
+            resolutions[i][0] = static_cast<GLfloat>(inputs[i]->texture_width);
+            resolutions[i][1] = static_cast<GLfloat>(inputs[i]->texture_height);
+            samplers[i] = static_cast<GLint>(i);
+        }
+        else {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
     }
+
+    glUseProgram(program);
+    glUniform1iv(u_iChannel, samplers.size(), samplers.data());
+    glUniform2fv(u_iChannelResolution, resolutions.size(), reinterpret_cast<GLfloat *>(resolutions.data()));
+    glUniform2f(u_iResolution, static_cast<GLfloat>(texture_width), static_cast<GLfloat>(texture_height));
+    glUniform1f(u_iGlfwTime, static_cast<GLfloat>(glfwGetTime()));
+    glUniform1fv(u_iParams, parameters.size(), parameters.data());
 
     glBindVertexArray(globals::vertex_array);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -88,8 +108,8 @@ void GLSLShaderNode::update_shader(void)
     std::ifstream stream = std::ifstream(path);
 
     if(!stream.is_open()) {
-        shader_info_log = "Unable to open shader file";
-        program_info_log = std::basic_string<GLchar>(path.string());
+        info_log_shader = "Unable to open shader file";
+        info_log_program = std::basic_string<GLchar>(path.string());
         return;
     }
 
@@ -106,15 +126,15 @@ void GLSLShaderNode::update_shader(void)
     glShaderSource(fragment_shader, 1, &source_cstr, nullptr);
     glCompileShader(fragment_shader);
 
-    shader_info_log.clear();
-    program_info_log.clear();
+    info_log_shader.clear();
+    info_log_program.clear();
 
-    GLint shader_info_log_length = {};
-    glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &shader_info_log_length);    
+    GLint info_log_length_shader = {};
+    glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &info_log_length_shader);    
 
-    if(shader_info_log_length > 0) {
-        shader_info_log.resize(shader_info_log_length);
-        glGetShaderInfoLog(fragment_shader, shader_info_log_length, nullptr, shader_info_log.data());
+    if(info_log_length_shader > 0) {
+        info_log_shader.resize(info_log_length_shader);
+        glGetShaderInfoLog(fragment_shader, info_log_length_shader, nullptr, info_log_shader.data());
     }
 
     GLint compile_status = {};
@@ -132,12 +152,12 @@ void GLSLShaderNode::update_shader(void)
 
     glDeleteShader(fragment_shader);
 
-    GLint program_info_log_length = {};
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &program_info_log_length);
+    GLint info_log_length_program = {};
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_log_length_program);
 
-    if(program_info_log_length > 0) {
-        program_info_log.resize(program_info_log_length);
-        glGetProgramInfoLog(program, program_info_log_length, nullptr, program_info_log.data());
+    if(info_log_length_program > 0) {
+        info_log_program.resize(info_log_length_program);
+        glGetProgramInfoLog(program, info_log_length_program, nullptr, info_log_program.data());
     }
 
     GLint link_status = {};
@@ -164,16 +184,10 @@ void GLSLShaderNode::update_texture(void)
 void GLSLShaderNode::update_uniforms(void)
 {
     if(program) {
-        u_inputs.clear();
-        u_inputs.resize(inputs.size(), (-1));
-
-        u_resolution = glGetUniformLocation(program, "u_Resolution");
-        u_time = glGetUniformLocation(program, "u_Time");
-        u_params = glGetUniformLocation(program, "u_Params");
-
-        for(std::size_t i = 0; i < inputs.size(); ++i) {
-            std::string name = "u_Input" + std::to_string(i);
-            u_inputs[i] = glGetUniformLocation(program, name.c_str());
-        }
+        u_iChannel = glGetUniformLocation(program, "iChannel");
+        u_iChannelResolution = glGetUniformLocation(program, "iChannelResolution");
+        u_iResolution = glGetUniformLocation(program, "iResolution");
+        u_iGlfwTime = glGetUniformLocation(program, "iGlfwTime");
+        u_iParams = glGetUniformLocation(program, "iParams");
     }
 }

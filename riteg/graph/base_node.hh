@@ -18,6 +18,11 @@ public:
     virtual bool render(void) = 0;
 
 public:
+    bool trace_backwards(const BaseNode *target) const;
+    bool trace_forwards(const BaseNode *target) const;
+    bool trace_path(const BaseNode *target) const;
+
+public:
     unsigned long id {};
     std::vector<BaseNode *> inputs {};
     std::unordered_set<BaseNode *> outputs {};

@@ -16,7 +16,7 @@ NodeType DestDisplayNode::get_type(void) const
 bool DestDisplayNode::render(void)
 {
     if(rendered) {
-        return true;
+        return false;
     }
 
     for(std::size_t i = 0; i < inputs.size(); ++i) {

@@ -20,3 +20,38 @@ BaseNode::~BaseNode(void)
         }
     }
 }
+
+bool BaseNode::trace_backwards(const BaseNode *target) const
+{
+    if(this != target) {
+        for(BaseNode *input : inputs) {
+            if(input == nullptr || !input->trace_backwards(target))
+                continue;
+            return true;
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+bool BaseNode::trace_forwards(const BaseNode *target) const
+{
+    if(this != target) {
+        for(BaseNode *output : outputs) {
+            if(!output->trace_forwards(target))
+                continue;
+            return true;
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+bool BaseNode::trace_path(const BaseNode *target) const
+{
+    return trace_backwards(target) || trace_forwards(target);
+}

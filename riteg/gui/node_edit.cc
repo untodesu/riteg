@@ -131,15 +131,15 @@ static void layout_glsl_shader(GLSLShaderNode *node)
         node->update_uniforms();
     }
     
-    if(!node->shader_info_log.empty() || !node->program_info_log.empty()) {
+    if(!node->info_log_shader.empty() || !node->info_log_program.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("[!!!]");
         if(ImGui::BeginItemTooltip()) {
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-            if(!node->shader_info_log.empty())
-                ImGui::TextUnformatted(node->shader_info_log.c_str());
-            if(!node->program_info_log.empty())
-                ImGui::TextUnformatted(node->program_info_log.c_str());
+            if(!node->info_log_shader.empty())
+                ImGui::TextUnformatted(node->info_log_shader.c_str());
+            if(!node->info_log_program.empty())
+                ImGui::TextUnformatted(node->info_log_program.c_str());
             ImGui::PopTextWrapPos();
             ImGui::EndTooltip();
         }
@@ -152,18 +152,18 @@ static void layout_glsl_shader(GLSLShaderNode *node)
 
     ImGui::NewLine();
 
-    int params_count = node->params.size();
+    int params_count = node->parameters.size();
 
     if(ImGui::InputInt("Params count", &params_count)) {
         if(params_count >= 1)
-            node->params.resize(params_count, 0.0f);
-        else node->params.clear();
+            node->parameters.resize(params_count, 0.0f);
+        else node->parameters.clear();
     }
 
     char tmp_buffer[256] = {};
-    for(std::size_t i = 0; i < node->params.size(); ++i) {
-        std::snprintf(tmp_buffer, sizeof(tmp_buffer), "u_Params[%zu]", i);
-        ImGui::DragFloat(tmp_buffer, &node->params[i], 1.0f, 0.0f, 100.0f);
+    for(std::size_t i = 0; i < node->parameters.size(); ++i) {
+        std::snprintf(tmp_buffer, sizeof(tmp_buffer), "iParams[%zu]", i);
+        ImGui::DragFloat(tmp_buffer, &node->parameters[i], 1.0f, 0.0f, 100.0f);
     }
 }
 
@@ -187,15 +187,15 @@ static void layout_shadertoy(ShadertoyNode *node)
         node->update_uniforms();
     }
     
-    if(!node->shader_info_log.empty() || !node->program_info_log.empty()) {
+    if(!node->info_log_shader.empty() || !node->info_log_program.empty()) {
         ImGui::SameLine();
         ImGui::TextDisabled("[!!!]");
         if(ImGui::BeginItemTooltip()) {
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-            if(!node->shader_info_log.empty())
-                ImGui::TextUnformatted(node->shader_info_log.c_str());
-            if(!node->program_info_log.empty())
-                ImGui::TextUnformatted(node->program_info_log.c_str());
+            if(!node->info_log_shader.empty())
+                ImGui::TextUnformatted(node->info_log_shader.c_str());
+            if(!node->info_log_program.empty())
+                ImGui::TextUnformatted(node->info_log_program.c_str());
             ImGui::PopTextWrapPos();
             ImGui::EndTooltip();
         }
@@ -391,19 +391,21 @@ void node_edit::layout(void)
         BaseNode *dst_node = reinterpret_cast<BaseNode *>(dst_ptr);
         std::size_t dst_index = SIZE_MAX;
 
-        // ImNodes seems to give us the exact same pointers as
-        // the strings in the input_slots[i].title; we can use this
-        // and avoid both string comparison and/or std::sscanf usage
-        for(std::size_t i = 0; i < dst_node->inputs.size(); ++i) {
-            if(input_slots[i].title == dst_cstr) {
-                dst_index = i;
-                break;
+        if(!dst_node->trace_path(src_node)) {
+            // ImNodes seems to give us the exact same pointers as
+            // the strings in the input_slots[i].title; we can use this
+            // and avoid both string comparison and/or std::sscanf usage
+            for(std::size_t i = 0; i < dst_node->inputs.size(); ++i) {
+                if(input_slots[i].title == dst_cstr) {
+                    dst_index = i;
+                    break;
+                }
             }
-        }
 
-        if(dst_index < dst_node->inputs.size()) {
-            dst_node->inputs[dst_index] = src_node;
-            src_node->outputs.insert(dst_node);
+            if(dst_index < dst_node->inputs.size()) {
+                dst_node->inputs[dst_index] = src_node;
+                src_node->outputs.insert(dst_node);
+            }
         }
     }
 

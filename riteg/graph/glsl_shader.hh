@@ -16,18 +16,19 @@ public:
     void update_uniforms(void);
 
 public:
-    std::vector<float> params {};
-
-public:
     std::string shader_path {};
-    std::basic_string<GLchar> shader_info_log {};
-    std::basic_string<GLchar> program_info_log {};
-    GLuint program {};
-    GLuint fbo {};
+    std::vector<float> parameters {};
 
 public:
-    std::vector<GLint> u_inputs {}; // uniform sampler2D u_InputN;
-    GLint u_resolution;             // uniform vec2 u_Resolution;
-    GLint u_time;                   // uniform float u_Time;
-    GLint u_params;                 // uniform float u_Params[N];
+    std::basic_string<GLchar> info_log_shader {};
+    std::basic_string<GLchar> info_log_program {};
+    GLuint framebuffer {};
+    GLuint program {};
+
+public:
+    GLint u_iChannel {};        // uniform sampler2D iChannel[N]
+    GLint u_iChannelResolution; // uniform vec2 iChannelResolution[N]
+    GLint u_iResolution;        // uniform vec2 iResolution
+    GLint u_iGlfwTime;          // uniform float iGlfwTime
+    GLint u_iParams;            // uniform float iParams[N]
 };

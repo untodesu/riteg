@@ -17,7 +17,7 @@ NodeType DestImageNode::get_type(void) const
 bool DestImageNode::render(void)
 {
     if(rendered) {
-        return true;
+        return false;
     }
 
     if(inputs.empty() || !inputs[0]->texture) {

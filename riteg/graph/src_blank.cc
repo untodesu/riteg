@@ -14,7 +14,7 @@ NodeType SrcBlankNode::get_type(void) const
 bool SrcBlankNode::render(void)
 {
     if(rendered) {
-        return true;
+        return false;
     }
 
     if(!texture) {

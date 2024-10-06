@@ -130,7 +130,7 @@ static bool parse_json(void)
             if(const JSON_Array *params = json_object_get_array(node, "params")) {
                 const std::size_t params_count = json_array_get_count(params);
                 for(std::size_t j = 0; j < params_count; ++j) {
-                    glsl_shader->params.push_back(json_array_get_number(params, j));
+                    glsl_shader->parameters.push_back(json_array_get_number(params, j));
                 }
             }
 
@@ -305,7 +305,7 @@ static bool write_json(void)
             JSON_Value *paramsv = json_value_init_array();
             JSON_Array *params = json_value_get_array(paramsv);
 
-            for(float param : glsl_shader->params) {
+            for(float param : glsl_shader->parameters) {
                 json_array_append_number(params, param);
             }
 
