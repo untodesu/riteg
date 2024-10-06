@@ -11,14 +11,14 @@ constexpr static const char *FILTER_STR = "riteg.json";
 static void layout_file_menu(void)
 {
     if(ImGui::MenuItem("New project", nullptr)) {
-        if(const char *directory = tinyfd_selectFolderDialog("New Project", std::filesystem::current_path().string().c_str())) {
+        if(const char *directory = tinyfd_selectFolderDialog("New Project", nullptr)) {
             project::create(std::filesystem::path(directory));
             project::restore_layout();
         }
     }
 
     if(ImGui::MenuItem("Open project", nullptr)) {
-        if(const char *path = tinyfd_openFileDialog("Open Project", std::filesystem::current_path().string().c_str(), 1, &FILTER_STR, FILTER_STR, 0)) {
+        if(const char *path = tinyfd_openFileDialog("Open Project", nullptr, 1, &FILTER_STR, FILTER_STR, 0)) {
             project::open(std::filesystem::path(path).parent_path());
             project::restore_layout();
         }

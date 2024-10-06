@@ -5,11 +5,9 @@
 using NodeType = unsigned int;
 constexpr static NodeType NODE_SRC_IMAGE    = 0x0000U;
 constexpr static NodeType NODE_SRC_BLANK    = 0x0001U;
-constexpr static NodeType NODE_SRC_FEEDBACK = 0x0002U;
-constexpr static NodeType NODE_DEST_IMAGE   = 0x0003U;
-constexpr static NodeType NODE_DEST_DISPLAY = 0x0004U;
-constexpr static NodeType NODE_GLSL_SHADER  = 0x0005U;
-constexpr static NodeType NODE_SHADERTOY    = 0x0006U;
+constexpr static NodeType NODE_DEST_IMAGE   = 0x0002U;
+constexpr static NodeType NODE_DEST_DISPLAY = 0x0003U;
+constexpr static NodeType NODE_SHADER_PASS  = 0x0004U;
 
 class BaseNode {
 public:

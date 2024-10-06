@@ -35,15 +35,15 @@ if(NOT glfw3_FOUND)
 endif()
 
 add_executable(riteg
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/core/format.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/core/globals.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/core/logging.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/base_node.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/dest_display.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/dest_image.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/glsl_shader.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shadertoy.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/shader_pass.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_blank.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/graph/src_image.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/core/globals.cc"
-    "${CMAKE_CURRENT_LIST_DIR}/riteg/core/logging.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/frame_select.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/menu_bar.cc"
     "${CMAKE_CURRENT_LIST_DIR}/riteg/gui/node_edit.cc"

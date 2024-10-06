@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024, untodesu
 #include "riteg/stdafx.hh"
+#include "riteg/core/format.hh"
 #include "riteg/core/globals.hh"
 #include "riteg/core/logging.hh"
 #include "riteg/graph/base_node.hh"
 #include "riteg/graph/dest_display.hh"
 #include "riteg/graph/dest_image.hh"
-#include "riteg/graph/glsl_shader.hh"
-#include "riteg/graph/shadertoy.hh"
+#include "riteg/graph/shader_pass.hh"
 #include "riteg/graph/src_blank.hh"
 #include "riteg/graph/src_image.hh"
 #include "riteg/gui/node_edit.hh"
@@ -32,9 +32,7 @@ static void update_input_slots(BaseNode *node)
         // we have enough; as per wasting allocations
         // C++ documentation states vectors grow in chunks
         while(input_slot_names.size() < node->inputs.size()) {
-            char staging_buffer[256] = {};
-            std::snprintf(staging_buffer, sizeof(staging_buffer), "Input[%zu]", input_slot_names.size());
-            input_slot_names.push_back(std::string(staging_buffer));
+            input_slot_names.push_back(util::format("Input[%zu]", input_slot_names.size()));
         }
 
         input_slots.resize(node->inputs.size(), ImNodes::Ez::SlotInfo());
@@ -95,10 +93,9 @@ static void layout_src_image(SrcImageNode *node)
     }
 }
 
-static void layout_glsl_shader(GLSLShaderNode *node)
+static void layout_shader_pass(ShaderPassNode *node)
 {
     ImGui::InputText("Name", &node->name);
-    ImGui::NewLine();
 
     int inputs_count = node->inputs.size();
 
@@ -113,7 +110,7 @@ static void layout_glsl_shader(GLSLShaderNode *node)
         if(inputs_count <= 0)
             node->inputs.clear();
         else node->inputs.resize(inputs_count, nullptr);
-        node->update_uniforms();
+        node->update_shader();
     }
 
     int texture_size[2] = {};
@@ -128,7 +125,6 @@ static void layout_glsl_shader(GLSLShaderNode *node)
 
     if(ImGui::InputText("Shader", &node->shader_path)) {
         node->update_shader();
-        node->update_uniforms();
     }
     
     if(!node->info_log_shader.empty() || !node->info_log_program.empty()) {
@@ -147,66 +143,23 @@ static void layout_glsl_shader(GLSLShaderNode *node)
 
     if(ImGui::Button("Force recompile", ImVec2(ImGui::CalcItemWidth(), 0.0f))) {
         node->update_shader();
-        node->update_uniforms();
     }
 
     ImGui::NewLine();
 
-    int params_count = node->parameters.size();
+    int params_count = node->params.size();
 
     if(ImGui::InputInt("Params count", &params_count)) {
         if(params_count >= 1)
-            node->parameters.resize(params_count, 0.0f);
-        else node->parameters.clear();
-    }
-
-    char tmp_buffer[256] = {};
-    for(std::size_t i = 0; i < node->parameters.size(); ++i) {
-        std::snprintf(tmp_buffer, sizeof(tmp_buffer), "iParams[%zu]", i);
-        ImGui::DragFloat(tmp_buffer, &node->parameters[i], 1.0f, 0.0f, 100.0f);
-    }
-}
-
-static void layout_shadertoy(ShadertoyNode *node)
-{
-    ImGui::InputText("Name", &node->name);
-    ImGui::NewLine();
-
-    int texture_size[2] = {};
-    texture_size[0] = node->texture_width;
-    texture_size[1] = node->texture_height;
-
-    if(!node->texture_width || !node->texture_height || ImGui::DragInt2("Output size", texture_size, 1.0f, 1, 4096)) {
-        node->texture_width = texture_size[0] ? texture_size[0] : 1;
-        node->texture_height = texture_size[1] ? texture_size[1] : 1;
-        node->update_texture();
-    }
-
-    if(ImGui::InputText("Shader", &node->shader_path)) {
+            node->params.resize(params_count, 0.0f);
+        else node->params.clear();
         node->update_shader();
-        node->update_uniforms();
-    }
-    
-    if(!node->info_log_shader.empty() || !node->info_log_program.empty()) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("[!!!]");
-        if(ImGui::BeginItemTooltip()) {
-            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-            if(!node->info_log_shader.empty())
-                ImGui::TextUnformatted(node->info_log_shader.c_str());
-            if(!node->info_log_program.empty())
-                ImGui::TextUnformatted(node->info_log_program.c_str());
-            ImGui::PopTextWrapPos();
-            ImGui::EndTooltip();
-        }
     }
 
-    if(ImGui::Button("Force recompile", ImVec2(ImGui::CalcItemWidth(), 0.0f))) {
-        node->update_shader();
-        node->update_uniforms();
+    for(std::size_t i = 0; i < node->params.size(); ++i) {
+        const std::string name = util::format("iParam[%zu]", i);
+        ImGui::DragFloat(name.c_str(), &node->params[i], 1.0f, 0.0f, 100.0f);
     }
-
-    ImGui::NewLine();
 }
 
 static void layout_popup_add(void)
@@ -256,17 +209,9 @@ static void layout_popup_add(void)
 
     ImGui::Separator();
 
-    if(ImGui::MenuItem("Shader - GLSL")) {
-        GLSLShaderNode *node = new GLSLShaderNode();
-        node->name = "GLSL shader";
-        node->id = project::random_dev();
-        ImNodes::AutoPositionNode(node);
-        project::tree.insert(node);
-    }
-
-    if(ImGui::MenuItem("Shader - Shadertoy")) {
-        ShadertoyNode *node = new ShadertoyNode();
-        node->name = "Shadertoy shader";
+    if(ImGui::MenuItem("Shader pass")) {
+        ShaderPassNode *node = new ShaderPassNode();
+        node->name = "Shader parss";
         node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
         project::tree.insert(node);
@@ -347,14 +292,9 @@ void node_edit::layout(void)
                     layout_src_image(static_cast<SrcImageNode *>(node));
                     ImNodes::Ez::OutputSlots(&output_slot, 1);
                     break;
-                case NODE_GLSL_SHADER:
+                case NODE_SHADER_PASS:
                     ImNodes::Ez::InputSlots(input_slots.data(), node->inputs.size());
-                    layout_glsl_shader(static_cast<GLSLShaderNode *>(node));
-                    ImNodes::Ez::OutputSlots(&output_slot, 1);
-                    break;
-                case NODE_SHADERTOY:
-                    ImNodes::Ez::InputSlots(input_slots.data(), node->inputs.size());
-                    layout_shadertoy(static_cast<ShadertoyNode *>(node));
+                    layout_shader_pass(static_cast<ShaderPassNode *>(node));
                     ImNodes::Ez::OutputSlots(&output_slot, 1);
                     break;
                 default:
