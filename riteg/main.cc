@@ -165,9 +165,10 @@ int main(void)
         menu_bar::layout();
 
         if(!project::directory.empty()) {
-            shader_files::layout();
-            project_edit::layout();
             frame_select::layout();
+            project_edit::layout();
+            shader_files::layout();
+
             node_edit::layout();
         }
 

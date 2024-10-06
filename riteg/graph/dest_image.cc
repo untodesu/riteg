@@ -17,10 +17,10 @@ NodeType DestImageNode::get_type(void) const
 bool DestImageNode::render(void)
 {
     if(rendered) {
-        return false;
+        return true;
     }
 
-    if(inputs.empty() || !inputs[0]->texture) {
+    if(!inputs[0] || !inputs[0]->texture) {
         // Nothing to pull data from
         return false;
     }

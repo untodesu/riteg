@@ -1,1 +1,0 @@
-{"description":"","input.mode":"disabled","input.directory":"","input.format":"","tree":[{"id":1806212281,"name":"Blank source","inputs":[],"position":[-322,50],"type":"src_blank","color":[0,0,0,1]},{"id":646692487,"name":"Display target","inputs":[1.8446744073709552e+19],"position":[703,33],"type":"dest_display","always_render":false}]}

@@ -79,7 +79,8 @@ static bool parse_json(void)
             continue;
         }
 
-        const unsigned long id = json_object_get_number(node, "id");
+        const char *id_str = json_object_get_string(node, "id");
+        const unsigned long id = id_str ? std::strtoul(id_str, nullptr, 10) : ULONG_MAX;
         const char *type_str = json_object_get_string(node, "type");
         const char *name_str = json_object_get_string(node, "name");
         const JSON_Array *position = json_object_get_array(node, "position");
@@ -200,19 +201,24 @@ static bool parse_json(void)
             continue;
         }
 
-        const unsigned long id = json_object_get_number(node, "id");
+        const char *id_str = json_object_get_string(node, "id");
+        const unsigned long id = id_str ? std::strtoul(id_str, nullptr, 10) : ULONG_MAX;
         const JSON_Array *inputs = json_object_get_array(node, "inputs");
 
         if(BaseNode *node = project::node_by_id(id)) {
             node->inputs.resize(json_array_get_count(inputs), nullptr);
 
             for(std::size_t j = 0; j < node->inputs.size(); ++j) {
-                if(BaseNode *input = project::node_by_id(json_array_get_number(inputs, j))) {
+                const char *input_str = json_array_get_string(inputs, j);
+                const unsigned long input_id = input_str ? std::strtoul(input_str, nullptr, 10) : ULONG_MAX;
+
+                if(BaseNode *input = project::node_by_id(input_id)) {
                     node->inputs[j] = input;
                     input->outputs.insert(node);
                 }
                 else {
-                    logging::warn("project::open: tree[%zu].inputs[%zu] refers to an unknown node", i, j);
+                    if(input_id != ULONG_MAX)
+                        logging::warn("project::open: tree[%zu].inputs[%zu] refers to an unknown node", i, j);
                     continue;
                 }
             }
@@ -267,11 +273,11 @@ static bool write_json(void)
 
         for(BaseNode *input : node->inputs) {
             if(input == nullptr)
-                json_array_append_number(inputs, ULONG_MAX);
-            else json_array_append_number(inputs, input->id);
+                json_array_append_string(inputs, std::to_string(ULONG_MAX).c_str());
+            else json_array_append_string(inputs, std::to_string(input->id).c_str());
         }
 
-        json_object_set_number(obj, "id", node->id);
+        json_object_set_string(obj, "id", std::to_string(node->id).c_str());
         json_object_set_string(obj, "name", node->name.c_str());
         json_object_set_value(obj, "inputs", inputsv);
         json_object_set_value(obj, "position", posv);
@@ -381,6 +387,8 @@ static bool write_json(void)
 
 void project::create(const std::filesystem::path &directory)
 {
+    project::close();
+
     std::error_code dummy = {};
     std::filesystem::create_directories(directory, dummy);
 
@@ -397,6 +405,8 @@ void project::create(const std::filesystem::path &directory)
 
 void project::open(const std::filesystem::path &directory)
 {
+    project::close();
+
     if(std::filesystem::is_directory(directory)) {
         project::directory = directory;
         project::json_path = std::filesystem::path(project::directory / "riteg.json");
@@ -425,6 +435,7 @@ void project::close(void)
     project::json_path = std::filesystem::path();
 
     project::tree.clear();
+    project::dest_image = nullptr;
 }
 
 void project::save(void)
@@ -460,9 +471,13 @@ void project::restore_layout(void)
     ImGuiID left = ImGui::DockBuilderSplitNode(globals::dockspace_id, ImGuiDir_Left, 0.20f, nullptr, &globals::dockspace_id);
     ImGuiID left_down = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.50f, nullptr, &left);
 
+    ImGuiID right = ImGui::DockBuilderSplitNode(globals::dockspace_id, ImGuiDir_Right, 0.20f, nullptr, &globals::dockspace_id);
+
     ImGui::DockBuilderDockWindow("###ProjectEdit_Window", left);
     ImGui::DockBuilderDockWindow("###FrameSelect_Window", left_down);
     ImGui::DockBuilderDockWindow("###ShaderFiles_Window", left_down);
+
     ImGui::DockBuilderDockWindow("###NodeEdit_Window", globals::dockspace_id);
+
     ImGui::DockBuilderFinish(globals::dockspace_id);
 }

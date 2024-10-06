@@ -50,7 +50,7 @@ NodeType ShadertoyNode::get_type(void) const
 bool ShadertoyNode::render(void)
 {
     if(rendered) {
-        return false;
+        return true;
     }
 
     if(inputs[0] && !inputs[0]->render())

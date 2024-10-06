@@ -169,6 +169,7 @@ void shader_files::layout(void)
     if(selected_filename && is_editing && ImGui::IsKeyReleased(ImGuiKey_Escape)) {
         if(is_creating)
             shader_filenames.pop_back();
+        selected_filename = nullptr;
         edit_filename = std::string();
         is_creating = false;
         is_editing = false;

@@ -246,7 +246,7 @@ static void layout_popup_add(void)
     if(ImGui::MenuItem("Target - image") && !project::dest_image) {
         DestImageNode *node = new DestImageNode();
         node->name = "Image target";
-        node->id = static_cast<unsigned long>(0);
+        node->id = project::random_dev();
         ImNodes::AutoPositionNode(node);
         project::tree.insert(node);
         project::dest_image = node;
@@ -317,6 +317,7 @@ void node_edit::layout(void)
     has_selected_nodes = false;
 
     if(open_context_menu) {
+        ImGui::FocusWindow(ImGui::GetCurrentWindow());
         ImGui::OpenPopup(POPUP_ID);
         target_node = nullptr;
     }
@@ -429,5 +430,6 @@ void node_edit::layout(void)
     }
 
     ImNodes::Ez::EndCanvas();
+
     ImGui::End();
 }
