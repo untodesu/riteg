@@ -36,6 +36,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec2 uv = fragCoord.xy / iResolution.xy;
     vec4 color = texture(iChannel0, uv);
     float n = float(fragCoord.x);
-    float fs = NTSC_LINE_RATE * 640.0;
+    float fs = NTSC_LINE_RATE * 1280.0;
     fragColor.x = color.x + modulate_qam(fs, NTSC_IQ_CARRIER, n, color.yz, uv.y);
 }

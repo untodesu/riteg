@@ -80,7 +80,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     vec2 uv = fragCoord.xy / iResolution.xy;
     float n = floor(fragCoord.x);
-    float fs = NTSC_LINE_RATE * 640.0;
+    float fs = NTSC_LINE_RATE * 1280.0;
 
     float accum_y = 0.0;
     float accum_iq = 0.0;

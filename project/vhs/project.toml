@@ -68,7 +68,7 @@ output_jpeg_quality = 95
 name = "gamma_correct"
 shader = "project:shaders/gamma_correct.frag"
 channels = ["!image"]
-parameters = [0.9]
+parameters = [1.0]
 scale = [1.0, 0.5]
 
 [[shader_pass]]
@@ -88,7 +88,7 @@ scale = [1.0, 0.5]
 name = "luminance_lp_a"
 shader = "project:shaders/blur_lowpass.frag"
 channels = ["base_yiq"]
-parameters = [64.0, 0.285, 1.0]
+parameters = [128.0, 0.3, 1.0]
 scale = [1.0, 0.5]
 
 [[shader_pass]]
@@ -123,7 +123,7 @@ scale = [1.0, 0.5]
 name = "vhs_color_amplify"
 shader = "project:shaders/vhs_color_amplify.frag"
 channels = ["chrominance_lp"]
-parameters = [0.75, 0.1, 1.0]
+parameters = [0.75, 0.1, 1.5]
 scale = [1.0, 0.5]
 
 [[shader_pass]]
@@ -159,7 +159,7 @@ channels = ["ntsc_snow"]
 name = "ntsc_postprocess"
 shader = "project:shaders/ntsc_postprocess.frag"
 channels = ["ntsc_demodulate"]
-parameters = [1.0, 3.5, 150]
+parameters = [1.25, 4.0, 120]
 
 [[shader_pass]]
 name = "vhs_headswitch"
