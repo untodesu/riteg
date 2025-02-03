@@ -1,0 +1,119 @@
+{
+  "textures": {
+    "downsample":     { "width": 1280, "height": 480, "filter": true },
+    "gamma":          { "width": 1280, "height": 480, "filter": true },
+    "yiq":            { "width": 1280, "height": 480, "filter": true },
+    "lowrange":       { "width": 1280, "height": 480, "filter": true },
+    "burnin":         { "width": 1280, "height": 480, "filter": true },
+    "burnin_store":   { "width": 1280, "height": 480, "filter": true },
+    "burnin_combine": { "width": 1280, "height": 480, "filter": true },
+    "luminance":      { "width": 1280, "height": 480, "filter": true },
+    "chrominance":    { "width": 1280, "height": 480, "filter": true },
+    "swizzle":        { "width": 1280, "height": 480, "filter": true },
+    "sharpen":        { "width": 1280, "height": 480, "filter": true },
+    "composite":      { "width": 1280, "height": 480, "filter": true },
+    "snow":           { "width": 1280, "height": 480, "filter": true },
+    "demodulate":     { "width": 1280, "height": 480, "filter": true },
+    "postprocess":    { "width": 1280, "height": 480, "filter": true },
+    "result":         { "width": 1280, "height": 480, "filter": true }
+  },
+  "blit": "result",
+  "passes": [
+    {
+      "shader": "shaders/mix_copy.frag",
+      "samplers": ["!image"],
+      "output": "downsample",
+      "params": []
+    },
+    {
+      "shader": "shaders/video_gamma.frag",
+      "samplers": ["downsample"],
+      "output": "gamma",
+      "params": [1.0]
+    },
+    {
+      "shader": "shaders/color_rgb_to_yiq.frag",
+      "samplers": ["gamma"],
+      "output": "yiq",
+      "params": []
+    },
+    {
+      "shader": "shaders/ccd_lowrange.frag",
+      "samplers": ["yiq"],
+      "output": "lowrange",
+      "params": [0.00, 1.0]
+    },
+    {
+      "shader": "shaders/ccd_burnin.frag",
+      "samplers": ["lowrange", "burnin_store"],
+      "output": "burnin",
+      "params": [0.995, 0.5]
+    },
+    {
+      "shader": "shaders/blur_gaussian_13.frag",
+      "samplers": ["burnin"],
+      "output": "burnin_store",
+      "params": [1.0, 1.0]
+    },
+    {
+      "shader": "shaders/mix_add.frag",
+      "samplers": ["burnin", "lowrange"],
+      "output": "burnin_combine",
+      "params": [1.0, 1.0]
+    },
+    {
+      "shader": "shaders/blur_lowpass.frag",
+      "samplers": ["burnin_combine"],
+      "output": "luminance",
+      "params": [32, 0.25, 1.0]
+    },
+    {
+      "shader": "shaders/blur_lowpass.frag",
+      "samplers": ["burnin_combine"],
+      "output": "chrominance",
+      "params": [64, 0.05, 2.5]
+    },
+    {
+      "shader": "shaders/swizzle_yiq.frag",
+      "samplers": ["luminance", "chrominance"],
+      "output": "swizzle",
+      "params": []
+    },
+    {
+      "shader": "shaders/video_sharpen.frag",
+      "samplers": ["swizzle"],
+      "output": "sharpen",
+      "params": [1.5, 0.0]
+    },
+    {
+      "shader": "shaders/ntsc_modulate.frag",
+      "samplers": ["sharpen"],
+      "output": "composite",
+      "params": []
+    },
+    {
+      "shader": "shaders/ntsc_snow.frag",
+      "samplers": ["composite"],
+      "output": "snow",
+      "params": [0.25, 0.125]
+    },
+    {
+      "shader": "shaders/ntsc_demodulate.frag",
+      "samplers": ["snow"],
+      "output": "demodulate",
+      "params": []
+    },
+    {
+      "shader": "shaders/ntsc_postprocess.frag",
+      "samplers": ["demodulate"],
+      "output": "postprocess",
+      "params": [1.0, 5.0]
+    },
+    {
+      "shader": "shaders/color_yiq_to_rgb.frag",
+      "samplers": ["postprocess"],
+      "output": "result",
+      "params": []
+    }
+  ]
+}
