@@ -1,7 +1,9 @@
-name: Generate Documentation
+name: Documentation SSG
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
