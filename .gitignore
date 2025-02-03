@@ -1,0 +1,10 @@
+/.vscode/*
+!/.vscode/c_cpp_properties.json
+!/.vscode/launch.json
+/build32/
+/build64/
+/build/
+/*.dll
+/*.exe
+/*.lib
+/*.so

@@ -1,0 +1,22 @@
+[project.base]
+author = "untodesu"
+about = "Basic example"
+input_mode = "disabled"
+output_mode = "disabled"
+output_resolution = [640, 480]
+final_pass = "pixelize"
+
+[project.docs]
+output_mode = "oneshot"
+output_path = "cwd:docs/project.example.png"
+output_filetype = "guess"
+
+[[shader_pass]]
+name = "example"
+shader = "project:shaders/example.frag"
+
+[[shader_pass]]
+name = "pixelize"
+shader = "project:shaders/pixelize.frag"
+parameters = [8.0, 8.0, 0.5, 0.5]
+channels = ["example"]

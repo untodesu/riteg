@@ -1,0 +1,11 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "RITEG",
+      "cStandard": "c99",
+      "defines": ["_CRT_SECURE_NO_WARNINGS", "_USE_MATH_DEFINES"],
+      "includePath": ["${workspaceFolder}/deps/include", "${workspaceFolder}", "${default}"]
+    }
+  ]
+}
