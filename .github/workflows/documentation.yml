@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - master
+    paths:
+      - .github/**
+      - docs/**
+      - mkdocs.yml
   workflow_dispatch:
 jobs:
   build:
