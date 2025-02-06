@@ -2,11 +2,14 @@
 #define RITEG_PRECOMPILED_HH 1
 #pragma once
 
+#include <cfloat>
 #include <cinttypes>
+#include <climits>
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 #include <algorithm>
 #include <array>
