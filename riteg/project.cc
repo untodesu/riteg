@@ -66,8 +66,8 @@ static int ritegAPI_get_image_source(lua_State *L)
 
 static int ritegAPI_create_shader(lua_State *L)
 {
-    int width = luaL_checkinteger(L, 1);
-    int height = luaL_checkinteger(L, 2);
+    auto width = static_cast<int>(luaL_checknumber(L, 1));
+    auto height = static_cast<int>(luaL_checknumber(L, 2));
     auto source = luaL_checkstring(L, 3);
 
     riteg_force_assert(width > 0);
@@ -101,7 +101,7 @@ static int ritegAPI_create_shader(lua_State *L)
                 riteg_force_assert(channel_index >= 0);
                 riteg_force_assert(channel_index < Shader::MAX_CHANNELS);
 
-                auto channel_source_id = luaL_checkinteger(L, -2);
+                auto channel_source_id = static_cast<int>(luaL_checknumber(L, -2));
                 riteg_force_assert(channel_source_id >= 0);
                 riteg_force_assert(channel_source_id < s_sources.size());
 
@@ -128,7 +128,7 @@ static int ritegAPI_create_shader(lua_State *L)
 
 static int ritegAPI_set_display_source(lua_State *L)
 {
-    int source_id = luaL_checkinteger(L, 1);
+    auto source_id = static_cast<int>(luaL_checknumber(L, 1));
     riteg_force_assert(source_id >= 0);
     riteg_force_assert(source_id < s_sources.size());
 
@@ -139,7 +139,7 @@ static int ritegAPI_set_display_source(lua_State *L)
 
 static int ritegAPI_set_output_source(lua_State *L)
 {
-    int source_id = luaL_checkinteger(L, 1);
+    auto source_id = static_cast<int>(luaL_checknumber(L, 1));
     riteg_force_assert(source_id >= 0);
     riteg_force_assert(source_id < s_sources.size());
 
@@ -234,7 +234,7 @@ const Source *project::get_source(int id)
 
 const Source *project::get_display_source(void)
 {
-    return s_display_source;
+    return s_display_source ? s_display_source : s_output_source;
 }
 
 const Source *project::get_output_source(void)
