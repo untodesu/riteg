@@ -37,3 +37,5 @@ if(WIN32)
     enable_language(RC)
     target_sources(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}/riteg.rc")
 endif()
+
+install(TARGETS riteg RUNTIME DESTINATION ".")
