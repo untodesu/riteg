@@ -2,16 +2,10 @@
 #define RITEG_TIMINGS_HH 1
 #pragma once
 
-class Timings final {
-public:
-    float curtime;
-    float frametime;
-    float framerate;
-    int frame_number;
-
-public:
-    static void setup(Timings &timings);
-    static void update(Timings &timings);
+struct Timings final {
+    float current_time;
+    float delta_time;
+    int frame_count;
 };
 
 #endif /* RITEG_TIMINGS_HH */

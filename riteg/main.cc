@@ -1,121 +1,137 @@
-#include "riteg/precompiled.hh"
+#include "riteg/pch.hh"
 
 #include "riteg/cmdline.hh"
-#include "riteg/debug_out.hh"
+#include "riteg/loader_fsiter.hh"
+#include "riteg/loader_oneshot.hh"
+#include "riteg/loader_sprintf.hh"
+#include "riteg/loader.hh"
 #include "riteg/project.hh"
-#include "riteg/shader_pass.hh"
+#include "riteg/saver_oneshot.hh"
+#include "riteg/saver_sprintf.hh"
+#include "riteg/saver.hh"
+#include "riteg/shader.hh"
+#include "riteg/source.hh"
 #include "riteg/timings.hh"
 
-#if defined(_WIN32)
-extern "C" __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
-extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-#endif
-
-static void wrapped_main(int argc, char **argv)
+int main(int argc, char **argv)
 {
-    cmdline::init(argc, argv);
-
-    glfwSetErrorCallback([](int error_code, const char *message) {
-        debug_out << "GLFW error: " << message;
+    glfwSetErrorCallback([](int error, const char *description) {
+        riteg_warning << "GLFW error: " << error << ": " << description << std::endl;
     });
 
-    if(!glfwInit()) {
-        throw std::runtime_error("glfwInit() failed");
-    }
+    riteg_force_assert_msg(glfwInit(), "glfwInit failed");
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_SAMPLES, 0);
-
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-#endif /* __APPLE__ */
-
-    auto window = glfwCreateWindow(640, 480, "RITEG.V2", nullptr, nullptr);
-
-    if(!window) {
-        throw std::runtime_error("glfwCreateWindow() failed");
-    }
+    auto window = glfwCreateWindow(640, 480, "RITEG", nullptr, nullptr);
+    riteg_force_assert_msg(window, "glfwCreateWindow failed");
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    if(!gladLoadGL(reinterpret_cast<GLADloadfunc>(&glfwGetProcAddress))) {
-        throw std::runtime_error("gladLoadGL() failed");
-    }
+    riteg_force_assert_msg(gladLoadGL(&glfwGetProcAddress), "gladLoadGL failed");
 
-    if(GLAD_GL_KHR_debug) {
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glDebugMessageCallback([](auto source, auto type, auto id, auto severity, auto length, auto message, auto param) {
-            debug_out << message;
-        }, nullptr);
+    Loader *loader = nullptr;
+    Saver *saver = nullptr;
 
-        // NVIDIA drivers print additional buffer information
-        // to the debug output that programmers might find useful.
-        static const std::uint32_t ignore_nvidia_131185 = UINT32_C(131185);
-        glDebugMessageControl(GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_OTHER, GL_DONT_CARE, 1, &ignore_nvidia_131185, GL_FALSE);
-    }
+    cmdline::init(argc, argv);
 
-    GLuint vaobj;
-    glGenVertexArrays(1, &vaobj);
-
-    ShaderPass::global_init();
-
-    project::init(cmdline::get("project", "project/vhs"), cmdline::get("preset"));
-
-    if(auto resolution = cmdline::get("size")) {
-        int width, height;
-
-        if(2 == std::sscanf(resolution, "%dx%d", &width, &height)) {
-            glfwSetWindowSize(window, width, height);
+    if(auto loader_type = cmdline::get("loader")) {
+        if(!std::strcmp(loader_type, "fsiter")) {
+            loader = new Loader_FSIter;
+        }
+        else if(!std::strcmp(loader_type, "oneshot")) {
+            loader = new Loader_OneShot;
+        }
+        else if(!std::strcmp(loader_type, "sprintf")) {
+            loader = new Loader_Sprintf;
+        }
+        else {
+            riteg_fatal << "Unknown loader type: " << loader_type << std::endl;
+            std::terminate();
         }
     }
-    else {
-        int width = project::output_image.resolution[0];
-        int height = project::output_image.resolution[1];
-        glfwSetWindowSize(window, width, height);
+
+    if(auto saver_type = cmdline::get("saver")) {
+        if(!std::strcmp(saver_type, "oneshot")) {
+            saver = new Saver_OneShot;
+        }
+        else if(!std::strcmp(saver_type, "sprintf")) {
+            saver = new Saver_Sprintf;
+        }
+        else {
+            riteg_fatal << "Unknown saver type: " << saver_type << std::endl;
+            std::terminate();
+        }
     }
 
+    Shader::init();
+
+    project::init();
+
+    cmdline::init_late();
+
+    if(loader) loader->init();
+    if(saver) saver->init();
+
     Timings timings;
-    Timings::setup(timings);
+    timings.current_time = glfwGetTime();
+    timings.delta_time = 0.0f;
+    timings.frame_count = 0;
 
     while(!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+        auto current_time = glfwGetTime();
 
-        Timings::update(timings);
+        timings.delta_time = current_time - timings.current_time;
+        timings.current_time = current_time;
 
-        glBindVertexArray(vaobj);
+        if(loader) {
+            // Load the next frame
+            loader->step();
+        }
 
-        project::render(window, timings);
+        project::render(timings);
+
+        if(auto display_source = project::get_display_source()) {
+            auto read_width = display_source->get_texture_width();
+            auto read_height = display_source->get_texture_height();
+
+            int write_width, write_height;
+            glfwGetFramebufferSize(window, &write_width, &write_height);
+
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, display_source->get_framebuffer());
+            glBlitFramebuffer(0, 0, read_width, read_height, 0, 0, write_width, write_height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        }
+
+        if(auto output_source = project::get_output_source()) {
+            auto read_width = output_source->get_texture_width();
+            auto read_height = output_source->get_texture_height();
+
+            int write_width, write_height;
+            glfwGetFramebufferSize(window, &write_width, &write_height);
+
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, output_source->get_framebuffer());
+            glBlitFramebuffer(0, 0, read_width, read_height, 0, 0, write_width, write_height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+            if(saver) {
+                saver->step();
+            }
+        }
+
+        timings.frame_count += 1;
 
         glfwSwapBuffers(window);
+        glfwPollEvents();
     }
 
     project::deinit();
 
-    ShaderPass::global_deinit();
+    Shader::deinit();
 
-    glDeleteVertexArrays(1, &vaobj);
+    cmdline::deinit();
 
     glfwDestroyWindow(window);
     glfwTerminate();
-}
 
-int main(int argc, char **argv)
-{
-    try {
-        wrapped_main(argc, argv);
-        return EXIT_SUCCESS;
-    }
-    catch(const std::exception &ex) {
-        std::cerr << ex.what() << std::endl;
-        std::terminate();
-    }
-    catch(...) {
-        std::cerr << "non-std::exception throw" << std::endl;
-        std::terminate();
-    }
+    return EXIT_SUCCESS;
 }

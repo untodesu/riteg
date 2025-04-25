@@ -1,575 +1,243 @@
-#include "riteg/precompiled.hh"
+#include "riteg/pch.hh"
 #include "riteg/project.hh"
 
+#include "riteg/blank.hh"
 #include "riteg/cmdline.hh"
-#include "riteg/debug_out.hh"
-#include "riteg/shader_pass.hh"
+#include "riteg/image.hh"
+#include "riteg/shader.hh"
 #include "riteg/timings.hh"
 
-std::filesystem::path project::workdir;
-std::filesystem::path project::projdir;
+static std::vector<Source*> s_sources;
+static Source *s_display_source = nullptr;
+static Source *s_output_source = nullptr;
+static lua_State *s_lua_state = nullptr;
 
-std::string project::about;
-std::string project::author;
-
-int project::input_mode = LOADSAVE_DISABLED;
-long project::input_maxframes = 0;
-std::string project::input_filename;
-BasicImage project::input_image;
-
-int project::output_mode = LOADSAVE_DISABLED;
-int project::output_filetype = SAVE_FILETYPE_INV;
-long project::output_maxframes = 0;
-int project::output_jpeg_quality = 95;
-std::string project::output_filename;
-BasicImage project::output_image;
-GLuint project::output_frame;
-
-ShaderPass *project::final_pass;
-std::unordered_map<std::string, ShaderPass*> project::passes_map;
-std::vector<ShaderPass*> project::passes;
-
-static std::vector<std::byte> cached_output_pixels;
-
-static std::string resolve_path(const std::string &path)
+static int ritegAPI_has_option(lua_State *L)
 {
-    if(auto semicolon = std::strchr(path.c_str(), ':')) {
-        auto substring = path.substr(0, std::size_t(semicolon - path.c_str()));
-        auto subpath = std::string(semicolon + 1);
+    auto option = luaL_checkstring(L, 1);
 
-        if(substring == "cwd")
-            return std::filesystem::path(project::workdir / subpath).string();
-        if(substring == "project")
-            return std::filesystem::path(project::projdir / subpath).string();
-        return std::filesystem::path(subpath).string();
-    }
+    riteg_force_assert(option != nullptr);
 
-    return std::filesystem::path(path).string();
+    if(cmdline::contains(option))
+        lua_pushboolean(L, true);
+    else lua_pushboolean(L, false);
+
+    return 1;
 }
 
-static void guess_output_filetype(const std::string &extension)
+static int ritegAPI_get_option_number(lua_State *L)
 {
-    if(extension == ".png")
-        project::output_filetype = SAVE_FILETYPE_PNG;
-    else if(extension == ".jpg")
-        project::output_filetype = SAVE_FILETYPE_JPG;
-    else if(extension == ".jpeg")
-        project::output_filetype = SAVE_FILETYPE_JPG;
-    else if(extension == ".tga")
-        project::output_filetype = SAVE_FILETYPE_TGA;
-    else throw std::invalid_argument("cannot guess output_filetype");
+    auto option = luaL_checkstring(L, 1);
+    auto fallback = luaL_optnumber(L, 2, 0.0);
+
+    if(auto value = cmdline::get(option))
+        lua_pushnumber(L, std::strtod(value, nullptr));
+    else lua_pushnumber(L, fallback);
+
+    return 1;
 }
 
-static void parse_project_table(const toml_table_t *table, std::string &final_pass_name)
+static int ritegAPI_get_option_string(lua_State *L)
 {
-    toml_datum_t datum;
+    auto option = luaL_checkstring(L, 1);
+    auto fallback = luaL_checkstring(L, 2);
 
-    if((datum = toml_string_in(table, "about")).ok) {
-        project::about = datum.u.s;
-        std::free(datum.u.s);
-    }
+    riteg_force_assert(option != nullptr);
+    riteg_force_assert(fallback != nullptr);
 
-    if((datum = toml_string_in(table, "author")).ok) {
-        project::author = datum.u.s;
-        std::free(datum.u.s);
-    }
+    lua_pushstring(L, cmdline::get(option, fallback));
 
-    if((datum = toml_string_in(table, "input_mode")).ok) {
-        if(!std::strcmp(datum.u.s, "disabled"))
-            project::input_mode = LOADSAVE_DISABLED;
-        else if(!std::strcmp(datum.u.s, "oneshot"))
-            project::input_mode = LOADSAVE_ONESHOT;
-        else if(!std::strcmp(datum.u.s, "sprintf"))
-            project::input_mode = LOADSAVE_SPRINTF;
-        else throw std::invalid_argument("invalid input_mode value");
-        std::free(datum.u.s);
-    }
-
-    if((datum = toml_string_in(table, "input_maxframes")).ok) {
-        if(!std::strcmp(datum.u.s, "probe"))
-            project::input_maxframes = LOAD_MAXFRAMES_PROBE;
-        else if(!std::strcmp(datum.u.s, "guess"))
-            project::input_maxframes = LOAD_MAXFRAMES_PROBE;
-        else throw std::invalid_argument("invalid input_maxframes value [0]");
-        std::free(datum.u.s);
-    }
-    else if((datum = toml_int_in(table, "input_maxframes")).ok) {
-        if(datum.u.i < 0)
-            throw std::invalid_argument("invalid input_maxframes value [1]");
-        project::input_maxframes = datum.u.i;
-    }
-
-    if(project::input_mode == LOADSAVE_ONESHOT) {
-        if((datum = toml_string_in(table, "input_path")).ok) {
-            project::input_filename = resolve_path(datum.u.s);
-            std::free(datum.u.s);
-        }
-    }
-    else if(project::input_mode == LOADSAVE_SPRINTF) {
-        if((datum = toml_string_in(table, "input_format")).ok) {
-            project::input_filename = resolve_path(datum.u.s);
-            std::free(datum.u.s);
-        }
-    }
-
-    if((datum = toml_string_in(table, "output_mode")).ok) {
-        if(!std::strcmp(datum.u.s, "disabled"))
-            project::output_mode = LOADSAVE_DISABLED;
-        else if(!std::strcmp(datum.u.s, "oneshot"))
-            project::output_mode = LOADSAVE_ONESHOT;
-        else if(!std::strcmp(datum.u.s, "sprintf"))
-            project::output_mode = LOADSAVE_SPRINTF;
-        else throw std::invalid_argument("invalid output_mode value");
-        std::free(datum.u.s);
-    }
-
-    if((datum = toml_string_in(table, "output_maxframes")).ok) {
-        if(!std::strcmp(datum.u.s, "input"))
-            project::output_maxframes = SAVE_MAXFRAMES_INPUT;
-        else throw std::invalid_argument("invalid output_maxframes value [0]");
-        std::free(datum.u.s);
-    }
-    else if((datum = toml_int_in(table, "output_maxframes")).ok) {
-        if(datum.u.i < 0)
-            throw std::invalid_argument("invalid output_maxframes value [1]");
-        project::output_maxframes = datum.u.i;
-    }
-
-    if(project::output_mode == LOADSAVE_ONESHOT) {
-        if((datum = toml_string_in(table, "output_path")).ok) {
-            project::output_filename = resolve_path(datum.u.s);
-            std::free(datum.u.s);
-        }
-    }
-    else if(project::output_mode == LOADSAVE_SPRINTF) {
-        if((datum = toml_string_in(table, "output_format")).ok) {
-            project::output_filename = resolve_path(datum.u.s);
-            std::free(datum.u.s);
-        }
-    }
-
-    if((datum = toml_string_in(table, "output_filetype")).ok) {
-        if(!std::strcmp(datum.u.s, "guess"))
-            guess_output_filetype(std::filesystem::path(project::output_filename).extension().string());
-        else guess_output_filetype(std::string(".") + std::string(datum.u.s));
-        std::free(datum.u.s);
-    }
-
-    if((datum = toml_int_in(table, "output_jpeg_quality")).ok) {
-        project::output_jpeg_quality = datum.u.i;
-        if(project::output_jpeg_quality < 1) project::output_jpeg_quality = 95;
-        if(project::output_jpeg_quality > 100) project::output_jpeg_quality = 95;
-    }
-
-    if(auto array = toml_array_in(table, "output_resolution")) {
-        int width = 0;
-        int height = 0;
-
-        if((datum = toml_int_at(array, 0)).ok) {
-            width = datum.u.i;
-        }
-
-        if((datum = toml_int_at(array, 1)).ok) {
-            height = datum.u.i;
-        }
-
-        if(width <= 0 || height <= 0) {
-            throw std::runtime_error("invalid output_resolution");
-        }
-
-        project::output_image.resolution[0] = width;
-        project::output_image.resolution[1] = height;
-        project::output_image.resolution[2] = project::output_image.resolution[0] / project::output_image.resolution[1];
-    }
-
-    if((datum = toml_string_in(table, "final_pass")).ok) {
-        final_pass_name.assign(datum.u.s);
-        std::free(datum.u.s);
-    }
+    return 1;
 }
 
-static bool do_load_image(const Timings &timings)
+static int ritegAPI_get_blank_source(lua_State *L)
 {
-    static char load_filename[4096];
-
-    if(project::input_mode == LOADSAVE_DISABLED) {
-        // We either started off disabled or
-        // reached the stopping condition last frame
-        return false;
-    }
-
-    switch(project::input_mode) {
-        case LOADSAVE_ONESHOT:
-            std::strncpy(load_filename, project::input_filename.c_str(), sizeof(load_filename));
-            break;
-        case LOADSAVE_SPRINTF:
-            stbsp_snprintf(load_filename, sizeof(load_filename), project::input_filename.c_str(), timings.frame_number);
-            break;
-        default:
-            debug_out << "disabled input_mode fell through";
-            return false;
-    }
-
-    if(project::input_mode == LOADSAVE_SPRINTF) {
-        if(project::input_maxframes != LOAD_MAXFRAMES_PROBE && timings.frame_number >= project::input_maxframes) {
-            // We're not in the probe mode and this frame
-            // is going to be the last, so we set load mode
-            // to disabled; won't be loading new images next frame
-            project::input_mode = LOADSAVE_DISABLED;
-        }
-    }
-
-    if(project::input_mode == LOADSAVE_ONESHOT) {
-        // One-shot mode - we're not supposed to load
-        // new images after we loaded a single one
-        project::input_mode = LOADSAVE_DISABLED;
-    }
-
-    stbi_set_flip_vertically_on_load(true);
-
-    int width, height;
-    auto pixels = stbi_load(load_filename, &width, &height, nullptr, STBI_rgb_alpha);
-
-    if(pixels == nullptr) {
-        if(project::input_maxframes == LOAD_MAXFRAMES_PROBE) {
-            // We're in a probing mode; a single failed
-            // load means we're done reading input frames
-            project::input_mode = LOADSAVE_DISABLED;
-        }
-
-        debug_out << load_filename << ": " << stbi_failure_reason();
-        return false;
-    }
-
-    project::input_image.resolution[0] = width;
-    project::input_image.resolution[1] = width;
-    project::input_image.resolution[2] = project::input_image.resolution[0] / project::input_image.resolution[1];
-
-    if(project::input_image.texture == 0)
-        glGenTextures(1, &project::input_image.texture);
-    glBindTexture(GL_TEXTURE_2D, project::input_image.texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    stbi_image_free(pixels);
-
-    return true;
+    assert(s_sources.size() > PROJECT_BLANK_SOURCE_ID);
+    lua_pushinteger(L, PROJECT_BLANK_SOURCE_ID);
+    return 1;
 }
 
-static void do_save_image(const Timings &timings, bool load_succeeded)
+static int ritegAPI_get_image_source(lua_State *L)
 {
-    static char save_filename[4096];
-
-    if(project::output_mode == LOADSAVE_DISABLED) {
-        // We either started off disabled or
-        // reached the stopping condition last frame
-        return;
-    }
-
-    if(project::output_maxframes == SAVE_MAXFRAMES_INPUT && !load_succeeded) {
-        // We're saving as much frames as the loader figures
-        // out, so when it fails we should fail as well
-        project::output_mode = LOADSAVE_DISABLED;
-        return;
-    }
-
-    switch(project::output_mode) {
-        case LOADSAVE_ONESHOT:
-            std::strncpy(save_filename, project::output_filename.c_str(), sizeof(save_filename));
-            break;
-        case LOADSAVE_SPRINTF:
-            stbsp_snprintf(save_filename, sizeof(save_filename), project::output_filename.c_str(), timings.frame_number);
-            break;
-        default:
-            debug_out << "disabled output_mode fell through";
-            return;
-    }
-
-    stbi_flip_vertically_on_write(true);
-
-    int width = project::output_image.resolution[0];
-    int height = project::output_image.resolution[1];
-    cached_output_pixels.resize(4 * width * height);
-
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, project::output_frame);
-    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, cached_output_pixels.data());
-
-    bool success = false;
-
-    switch(project::output_filetype) {
-        case SAVE_FILETYPE_PNG:
-            success = stbi_write_png(save_filename, width, height, 4, cached_output_pixels.data(), 4 * width);
-            break;
-        case SAVE_FILETYPE_JPG:
-            success = stbi_write_jpg(save_filename, width, height, 4, cached_output_pixels.data(), project::output_jpeg_quality);
-            break;
-        case SAVE_FILETYPE_TGA:
-            success = stbi_write_tga(save_filename, width, height, 4, cached_output_pixels.data());
-            break;
-    }
-
-    if(!success) {
-        debug_out << save_filename << ": failed";
-        if(project::output_maxframes != SAVE_MAXFRAMES_INPUT) {
-            project::output_mode = LOADSAVE_DISABLED;
-        }
-    }
-
-    if(timings.frame_number >= project::output_maxframes) {
-        if(project::output_maxframes != SAVE_MAXFRAMES_INPUT) {
-            project::output_mode = LOADSAVE_DISABLED;
-            return;
-        }
-    }
+    assert(s_sources.size() > PROJECT_IMAGE_SOURCE_ID);
+    lua_pushinteger(L, PROJECT_IMAGE_SOURCE_ID);
+    return 1;
 }
 
-void project::init(const char *project_path, const char *preset)
+static int ritegAPI_create_shader(lua_State *L)
 {
-    toml_datum_t datum;
+    int width = luaL_checkinteger(L, 1);
+    int height = luaL_checkinteger(L, 2);
+    auto source = luaL_checkstring(L, 3);
 
-    project::workdir = std::filesystem::current_path();
-    project::projdir = std::filesystem::current_path() / project_path;
+    riteg_force_assert(width > 0);
+    riteg_force_assert(height > 0);
+    riteg_force_assert(source != nullptr);
 
-    auto toml_filename = project::projdir / "project.toml";
-    auto toml_file = std::ifstream(toml_filename);
+    auto shader = new Shader(width, height, source);
 
-    if(toml_file.fail()) {
-        throw std::system_error(errno, std::system_category(), toml_filename.string());
-    }
+    // There can be an additional argument which is a table
+    // that contains shadertoy-styled channel input assignments.
+    // It would look somewhat like this: { iChannel0 = previous_pass }
+    if(lua_istable(L, 4)) {
+        lua_gettable(L, 4);
 
-    char toml_error[4096];
-    auto toml_source = std::string(std::istreambuf_iterator<char>(toml_file), std::istreambuf_iterator<char>());
-    auto toml_root = toml_parse(toml_source.data(), toml_error, sizeof(toml_error));
+        // For some reason lua_getfield refuses to work
+        // in this specific case, so instead we iterate through
+        // the table and cherry-pick key-value pairs we can handle
+        // https://stackoverflow.com/questions/6137684/iterate-through-lua-table
 
-    if(toml_root == nullptr) {
-        throw std::runtime_error(toml_error);
-    }
+        lua_pushnil(L);
 
-    auto project_table = toml_table_in(toml_root, "project");
+        while(lua_next(L, -2)) {
+            lua_pushvalue(L, -2);
 
-    if(project_table == nullptr) {
-        throw std::runtime_error("cannot locate [project]");
-    }
+            auto key = luaL_checkstring(L, -1);
+            riteg_force_assert(key != nullptr);
 
-    auto project_base = toml_table_in(project_table, "base");
+            int channel_index;
 
-    if(project_base == nullptr) {
-        throw std::runtime_error("cannot locate [project.base]");
-    }
+            if(1 == std::sscanf(key, "iChannel%d", &channel_index)) {
+                riteg_force_assert(channel_index >= 0);
+                riteg_force_assert(channel_index < Shader::MAX_CHANNELS);
 
-    std::string final_pass_name;
-    parse_project_table(project_base, final_pass_name);
+                auto channel_source_id = luaL_checkinteger(L, -2);
+                riteg_force_assert(channel_source_id >= 0);
+                riteg_force_assert(channel_source_id < s_sources.size());
 
-    if(preset) {
-        auto preset_table = toml_table_in(project_table, preset);
+                auto channel_source = s_sources[channel_source_id];
+                riteg_force_assert(channel_source != nullptr);
 
-        if(preset_table == nullptr) {
-            throw std::runtime_error("cannot locate [project.preset]");
-        }
+                shader->setChannel(channel_index, channel_source);
 
-        parse_project_table(preset_table, final_pass_name);
-    }
-
-    if(auto scale_string = cmdline::get("scale")) {
-        auto scale_float = std::strtof(scale_string, nullptr);
-
-        if(scale_float >= 0.25f && scale_float <= 5.0f) {
-            project::output_image.resolution[0] *= scale_float;
-            project::output_image.resolution[1] *= scale_float;
-        }
-    }
-
-    if(project::output_image.resolution[0] <= 0.0f || project::output_image.resolution[1] <= 0.0f) {
-        throw std::runtime_error("invalid output_resolution value");
-    }
-
-    glGenTextures(1, &project::output_image.texture);
-    glBindTexture(GL_TEXTURE_2D, project::output_image.texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, project::output_image.resolution[0], project::output_image.resolution[1], 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    glGenFramebuffers(1, &project::output_frame);
-    glBindFramebuffer(GL_FRAMEBUFFER, project::output_frame);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, project::output_image.texture, 0);
-
-    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        throw std::runtime_error("framebuffer status check failed");
-    }
-
-    if(final_pass_name.empty()) {
-        throw std::runtime_error("final_pass value is empty or missing");
-    }
-
-    if(project::output_mode != LOADSAVE_DISABLED && project::output_filetype == SAVE_FILETYPE_INV) {
-        throw std::runtime_error("output is not disabled but filetype has not been set correctly");
-    }
-
-    auto passes_array = toml_array_in(toml_root, "shader_pass");
-
-    if(passes_array == nullptr) {
-        throw std::runtime_error("cannot locate [[shader_pass]] array");
-    }
-
-    for(int i = 0;; ++i) {
-        auto pass_table = toml_table_at(passes_array, i);
-
-        if(pass_table == nullptr) {
-            debug_out << "parsed " << i << " shader passes";
-            break;
-        }
-
-        auto pass_name = toml_string_in(pass_table, "name");
-        auto pass_shader = toml_string_in(pass_table, "shader");
-
-        if(!pass_name.ok) {
-            throw std::runtime_error("invalid or missing shader_pass.name value");
-        }
-
-        if(!pass_shader.ok) {
-            throw std::runtime_error("invalid or missing shader_pass.shader value");
-        }
-
-        if(pass_name.u.s[0] == '!') {
-            throw std::runtime_error("pass names prefixed with '!' are reserved for internal use");
-        }
-
-        if(project::passes_map.find(pass_name.u.s) != project::passes_map.cend()) {
-            throw std::runtime_error("duplicate shader passes are not allowed");
-        }
-
-        auto pass_width = project::output_image.resolution[0];
-        auto pass_height = project::output_image.resolution[1];
-
-        if(auto pass_resolution = toml_array_in(pass_table, "resolution")) {
-            auto pass_wide_d = toml_int_at(pass_resolution, 0);
-            auto pass_tall_d = toml_int_at(pass_resolution, 1);
-
-            if(pass_wide_d.ok && pass_wide_d.u.i > 0 && pass_tall_d.ok && pass_tall_d.u.i > 0) {
-                pass_width = pass_wide_d.u.i;
-                pass_height = pass_tall_d.u.i;
+                lua_pop(L, 2);
+                continue;
             }
+
+            lua_pop(L, 2);
+            continue;
         }
-
-        if(auto pass_scale = toml_array_in(pass_table, "scale")) {
-            auto pass_sx_d = toml_double_at(pass_scale, 0);
-            auto pass_sy_d = toml_double_at(pass_scale, 1);
-
-            if(pass_sx_d.ok && pass_sx_d.u.d > 0.0 && pass_sy_d.ok && pass_sy_d.u.d > 0.0) {
-                pass_width *= pass_sx_d.u.d;
-                pass_height *= pass_sy_d.u.d;
-            }
-        }
-
-        pass_width = std::ceilf(pass_width);
-        pass_height = std::ceilf(pass_height);
-
-        ShaderPass *pass = new ShaderPass;
-        ShaderPass::create(pass, pass_name.u.s, pass_width, pass_height, resolve_path(pass_shader.u.s).c_str());
-
-        std::free(pass_shader.u.s);
-        std::free(pass_name.u.s);
-
-        if(auto pass_parameters = toml_array_in(pass_table, "parameters")) {
-            for(int j = 0; j < MAX_SHADER_PARAMETERS; ++j) {
-                if((datum = toml_int_at(pass_parameters, j)).ok) {
-                    pass->parameters[j] = datum.u.i;
-                }
-                else if((datum = toml_double_at(pass_parameters, j)).ok) {
-                    pass->parameters[j] = datum.u.d;
-                }
-                else break;
-            }
-        }
-
-        if(auto pass_channels = toml_array_in(pass_table, "channels")) {
-            for(int j = 0; j < MAX_SHADER_CHANNELS; ++j) {
-                if((datum = toml_string_at(pass_channels, j)).ok) {
-                    if(!std::strcmp(datum.u.s, "!image")) {
-                        pass->channels[j] = &project::input_image;
-                        std::free(datum.u.s);
-                        continue;
-                    }
-
-                    auto it = project::passes_map.find(datum.u.s);
-
-                    if(it == project::passes_map.cend()) {
-                        throw std::runtime_error("invalid or missing channel input");
-                    }
-
-                    pass->channels[j] = &it->second->output_image;
-                    std::free(datum.u.s);
-                    continue;
-                }
-                else break;
-            }
-        }
-    
-        project::passes_map.insert_or_assign(pass->name, pass);
-        project::passes.push_back(pass);
     }
 
-    toml_free(toml_root);
+    s_sources.push_back(shader);
 
-    auto final_it = project::passes_map.find(final_pass_name);
+    lua_pushinteger(L, static_cast<lua_Integer>(s_sources.size() - 1));
 
-    if(final_it == project::passes_map.cend()) {
-        throw std::runtime_error("shader pass specified in final_pass is missing or invalid");
-    }
+    return 1;
+}
 
-    project::final_pass = final_it->second;
+static int ritegAPI_set_display_source(lua_State *L)
+{
+    int source_id = luaL_checkinteger(L, 1);
+    riteg_force_assert(source_id >= 0);
+    riteg_force_assert(source_id < s_sources.size());
 
-    project::input_image.resolution[0] = 0.0f;
-    project::input_image.resolution[1] = 0.0f;
-    project::input_image.resolution[2] = 0.0f;
-    project::input_image.texture = 0;
+    s_display_source = s_sources[source_id];
+
+    return 0;
+}
+
+static int ritegAPI_set_output_source(lua_State *L)
+{
+    int source_id = luaL_checkinteger(L, 1);
+    riteg_force_assert(source_id >= 0);
+    riteg_force_assert(source_id < s_sources.size());
+
+    s_output_source = s_sources[source_id];
+
+    return 0;
+}
+
+void project::init(void)
+{
+    s_sources.clear();
+    s_sources.push_back(new Blank()); // PROJECT_BLANK_SOURCE_ID
+    s_sources.push_back(new Image()); // PROJECT_IMAGE_SOURCE_ID
+    s_display_source = nullptr;
+    s_output_source = nullptr;
+
+    static const luaL_Reg riteg_api_functions[] = {
+        { "has_option",         &ritegAPI_has_option            },
+        { "get_option_number",  &ritegAPI_get_option_number     },
+        { "get_option_string",  &ritegAPI_get_option_string     },
+        { "get_blank_source",   &ritegAPI_get_blank_source      },
+        { "get_image_source",   &ritegAPI_get_image_source      },
+        { "create_shader",      &ritegAPI_create_shader         },
+        { "set_display_source", &ritegAPI_set_display_source    },
+        { "set_output_source",  &ritegAPI_set_output_source     },
+        { nullptr,              nullptr                         },
+    };
+
+    s_lua_state = luaL_newstate();
+
+    assert(s_lua_state != nullptr);
+
+    luaL_openlibs(s_lua_state);
+
+    luaL_newlibtable(s_lua_state, riteg_api_functions);
+    luaL_setfuncs(s_lua_state, riteg_api_functions, 0);
+    lua_setglobal(s_lua_state, "riteg");
 }
 
 void project::deinit(void)
 {
-    for(ShaderPass *pass : project::passes)
-        delete pass;
-    project::passes_map.clear();
-    project::passes.clear();
-
-    glDeleteFramebuffers(1, &project::output_frame);
-    glDeleteTextures(1, &project::input_image.texture);
-    glDeleteTextures(1, &project::output_image.texture);
-
-    project::final_pass = nullptr;
+    for(auto source : s_sources)
+        delete source;
+    lua_close(s_lua_state);
+    s_display_source = nullptr;
+    s_output_source = nullptr;
+    s_lua_state = nullptr;
+    s_sources.clear();
 }
 
-void project::render(GLFWwindow *window, const Timings &timings)
+void project::render(const Timings &timings)
 {
-    auto load_succeeded = do_load_image(timings);
+    for(auto source : s_sources) {
+        assert(source != nullptr);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    for(const ShaderPass *pass : project::passes) {
-        ShaderPass::render(pass, timings);
+        source->render(timings);
     }
+}
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, project::final_pass->framebuffer);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, project::output_frame);
-    glBlitFramebuffer(0, 0, project::final_pass->output_image.resolution[0], project::final_pass->output_image.resolution[1], 0, 0, project::output_image.resolution[0], project::output_image.resolution[1], GL_COLOR_BUFFER_BIT, GL_LINEAR);
+bool project::load_input_RGBA(const std::filesystem::path &path)
+{
+    assert(!path.empty());
+    assert(s_sources.size() > PROJECT_IMAGE_SOURCE_ID);
 
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
+    // FIXME: we can probably use dynamic_cast here
+    // but I really doubt it's worth it in this specific case
+    auto image = static_cast<Image*>(s_sources[PROJECT_IMAGE_SOURCE_ID]);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    assert(image != nullptr);
 
-    glViewport(0, 0, width, height);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, project::final_pass->framebuffer);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, project::final_pass->output_image.resolution[0], project::final_pass->output_image.resolution[1], 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    return image->load_RGBA(path);
+}
 
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+void project::run_lua_script(const char *filename)
+{
+    assert(s_lua_state != nullptr);
 
-    do_save_image(timings, load_succeeded);
+    assert(filename != nullptr);
+
+    if(luaL_dofile(s_lua_state, filename) != LUA_OK) {
+        riteg_fatal << "Lua error: " << lua_tostring(s_lua_state, -1) << std::endl;
+        std::terminate();
+    }
+}
+
+const Source *project::get_source(int id)
+{
+    if(id < 0 || id >= s_sources.size())
+        return nullptr;
+    return s_sources[id];
+}
+
+const Source *project::get_display_source(void)
+{
+    return s_display_source;
+}
+
+const Source *project::get_output_source(void)
+{
+    return s_output_source;
 }

@@ -1,74 +1,75 @@
-#include "riteg/precompiled.hh"
+#include "riteg/pch.hh"
 #include "riteg/cmdline.hh"
 
-#include "riteg/debug_out.hh"
+#include "riteg/project.hh"
 
-// Valid options always start with OPTION_PREFIX, can contain
-// a bunch of OPTION_PREFIX'es inside and never end with one
-constexpr static char OPTION_PREFIX = '-';
-
-static std::unordered_map<std::string, std::string> options;
-
-static inline bool is_option_string(const std::string &string)
-{
-    if(string.find_last_of(OPTION_PREFIX) >= (string.size() - 1))
-        return false;
-    return string[0] == OPTION_PREFIX;
-}
-
-static inline std::string get_option(const std::string &string)
-{
-    std::size_t i;
-    for(i = 0; string[i] == OPTION_PREFIX; ++i);
-    return std::string(string.cbegin() + i, string.cend());
-}
+static int s_argc;
+static char **s_argv;
 
 void cmdline::init(int argc, char **argv)
 {
-    for(int idx = 1; idx < argc; ++idx) {
-        std::string string = argv[idx];
+    assert(argc > 0);
+    assert(argv != nullptr);
 
-        if(!is_option_string(string)) {
-            debug_out << "cmdline: non-argument at " << idx << ": " << string;
-            continue;
-        }
+    s_argc = argc;
+    s_argv = argv;
 
-        auto option_string = get_option(string);
-        auto next_idx = idx + 1;
-
-        if(next_idx < argc) {
-            std::string argument = argv[next_idx];
-
-            if(!is_option_string(argument)) {
-                options.insert_or_assign(option_string, argument);
-                idx = next_idx;
-                continue;
-            }
-        }
-
-        // The option is either last or has no
-        // argument (happens when there is a valid
-        // option right next to the one we're parsing)
-        options.insert_or_assign(option_string, std::string());
+    if(s_argc < 2) {
+        riteg_fatal << "usage: riteg <script> [options]" << std::endl;
+        std::terminate();
     }
+
+    // Skip the application name
+    s_argc -= 1;
+    s_argv += 1;
 }
 
-void cmdline::insert(const char *option, const char *argument)
+void cmdline::init_late(void)
 {
-    if(argument == nullptr)
-        options.insert_or_assign(option, std::string());
-    else options.insert_or_assign(option, argument);
+    assert(s_argc > 0);
+    assert(s_argv != nullptr);
+
+    project::run_lua_script(s_argv[0]);
+
+    // Skip the script name
+    s_argc -= 1;
+    s_argv += 1;
 }
 
-const char *cmdline::get(const char *option, const char *fallback)
+void cmdline::deinit(void)
 {
-    auto it = options.find(option);
-    if(it == options.cend())
-        return fallback;
-    return it->second.c_str();
+    s_argc = 0;
+    s_argv = nullptr;
 }
 
 bool cmdline::contains(const char *option)
 {
-    return options.count(option);
+    assert(option != nullptr);
+
+    for(int i = 0; i < s_argc; ++i) {
+        if(s_argv[i][0] != '-')
+            continue;
+        if(std::strcmp(&s_argv[i][1], option))
+            continue;
+        return true;
+    }
+
+    return false;
+}
+
+const char *cmdline::get(const char *option, const char *fallback)
+{
+    assert(option != nullptr);
+
+    for(int i = 0; i < s_argc; ++i) {
+        if(s_argv[i][0] != '-')
+            continue;
+        if(std::strcmp(&s_argv[i][1], option))
+            continue;
+        if(i + 1 >= s_argc)
+            return fallback;
+        return s_argv[i + 1];
+    }
+
+    return fallback;
 }
