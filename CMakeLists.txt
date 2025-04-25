@@ -33,7 +33,7 @@ endif()
 add_subdirectory(deps/glad)
 add_subdirectory(deps/lua)
 add_subdirectory(deps/stb)
-add_subdirectory(project)
+add_subdirectory(riteg)
 
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/LICENSE.txt" DESTINATION ".")
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/thirdpartylegalnotices.txt" DESTINATION ".")
