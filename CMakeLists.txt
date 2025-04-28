@@ -16,9 +16,6 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 ## avoid pulling redistributable installers alongside the game package
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-## Output binaries into build root
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
-
 find_package(glfw3 3.3 QUIET)
 
 if(NOT glfw3_FOUND)
