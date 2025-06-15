@@ -16,25 +16,23 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 ## avoid pulling redistributable installers alongside the game package
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-find_package(glfw3 3.4 QUIET)
-
-if(NOT glfw3_FOUND)
-    include(FetchContent)
-    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.4)
-    FetchContent_MakeAvailable(glfw)
-endif()
-
 add_subdirectory(deps/glad)
+add_subdirectory(deps/glfw)
+add_subdirectory(deps/imgui)
 add_subdirectory(deps/lua)
 add_subdirectory(deps/stb)
+
 add_subdirectory(riteg)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_custom_target(thirdpartylegalnotices ALL
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/thirdpartylegalnotices.py" "${CMAKE_CURRENT_LIST_DIR}/deps"
+    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/thirdpartylegalnotices.txt"
+    DEPENDS "${CMAKE_CURRENT_LIST_DIR}/thirdpartylegalnotices.py"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/thirdpartylegalnotices.txt" DESTINATION ".")
+
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/LICENSE.txt" DESTINATION ".")
-install(FILES "${CMAKE_CURRENT_LIST_DIR}/thirdpartylegalnotices.txt" DESTINATION ".")
 install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/project" DESTINATION ".")
 
 set(CPACK_PACKAGE_NAME "RITEG")

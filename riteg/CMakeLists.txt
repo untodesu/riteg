@@ -30,7 +30,7 @@ add_executable(riteg
 target_precompile_headers(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}/pch.hh")
 target_compile_definitions(riteg PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(riteg PRIVATE "${PROJECT_SOURCE_DIR}")
-target_link_libraries(riteg PRIVATE glfw glad lua stb)
+target_link_libraries(riteg PRIVATE glad glfw imgui imgui_glfw imgui_opengl3 lua stb)
 target_compile_features(riteg PRIVATE cxx_std_17)
 
 if(WIN32)
