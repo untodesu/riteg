@@ -75,7 +75,7 @@ local common_glsl <const> = string.format([[
     const float NTSC_SCALE = 1.0; // Change the overall scale of the NTSC-style encoding and decoding artifacts
     const float PHASE_ALTERNATION = PI; // PI for PAL-like
     const float NOISE_STRENGTH = 0.015625; // Amount of TV static
-    const float SATURATION = 3.0; // Saturation control
+    const float SATURATION = 4.0; // Saturation control
     const float WINDOW_BIAS = 0.0; // Offsets shape of window. This can make artifacts smear to one side or the other.
 
     const float VHS_CUTOFF = 0.01;
