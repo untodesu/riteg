@@ -1,4 +1,5 @@
 add_executable(riteg
+    "${CMAKE_CURRENT_LIST_DIR}/assert.hh"
     "${CMAKE_CURRENT_LIST_DIR}/blank.cc"
     "${CMAKE_CURRENT_LIST_DIR}/blank.hh"
     "${CMAKE_CURRENT_LIST_DIR}/cmdline.cc"
@@ -12,6 +13,8 @@ add_executable(riteg
     "${CMAKE_CURRENT_LIST_DIR}/loader_sprintf.cc"
     "${CMAKE_CURRENT_LIST_DIR}/loader_sprintf.hh"
     "${CMAKE_CURRENT_LIST_DIR}/loader.hh"
+    "${CMAKE_CURRENT_LIST_DIR}/logging.cc"
+    "${CMAKE_CURRENT_LIST_DIR}/logging.hh"
     "${CMAKE_CURRENT_LIST_DIR}/main.cc"
     "${CMAKE_CURRENT_LIST_DIR}/pch.hh"
     "${CMAKE_CURRENT_LIST_DIR}/project.cc"
@@ -31,7 +34,7 @@ target_precompile_headers(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}/pch.hh")
 target_compile_definitions(riteg PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(riteg PRIVATE "${PROJECT_SOURCE_DIR}")
 target_link_libraries(riteg PRIVATE glad glfw imgui imgui_glfw imgui_opengl3 lua stb)
-target_compile_features(riteg PRIVATE cxx_std_17)
+target_compile_features(riteg PRIVATE cxx_std_20)
 
 if(WIN32)
     enable_language(RC)

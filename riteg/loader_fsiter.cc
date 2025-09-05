@@ -1,4 +1,5 @@
 #include "riteg/pch.hh"
+
 #include "riteg/loader_fsiter.hh"
 
 #include "riteg/cmdline.hh"
@@ -8,7 +9,7 @@ void Loader_FSIter::init(void)
 {
     auto fsiter_path = cmdline::get("ipath");
 
-    riteg_force_assert_msg(fsiter_path, "Invalid argument [ipath]");
+    riteg_force_assert_msg(fsiter_path.size(), "Invalid argument [ipath]");
 
     for(auto& entry : std::filesystem::directory_iterator(fsiter_path)) {
         if(entry.is_regular_file()) {

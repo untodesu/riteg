@@ -1,22 +1,24 @@
 #include "riteg/pch.hh"
 
 #include "riteg/cmdline.hh"
+#include "riteg/loader.hh"
 #include "riteg/loader_fsiter.hh"
 #include "riteg/loader_oneshot.hh"
 #include "riteg/loader_sprintf.hh"
-#include "riteg/loader.hh"
 #include "riteg/project.hh"
+#include "riteg/saver.hh"
 #include "riteg/saver_oneshot.hh"
 #include "riteg/saver_sprintf.hh"
-#include "riteg/saver.hh"
 #include "riteg/shader.hh"
 #include "riteg/source.hh"
 #include "riteg/timings.hh"
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-    glfwSetErrorCallback([](int error, const char *description) {
-        riteg_warning << "GLFW error: " << error << ": " << description << std::endl;
+    logging::add_sink(&logging::sinks::stderr_ansi);
+
+    glfwSetErrorCallback([](int error, const char* description) {
+        LOG_ERROR("glfw error: {}: {}", error, description);
     });
 
     riteg_force_assert_msg(glfwInit(), "glfwInit failed");
@@ -29,36 +31,39 @@ int main(int argc, char **argv)
 
     riteg_force_assert_msg(gladLoadGL(&glfwGetProcAddress), "gladLoadGL failed");
 
-    Loader *loader = nullptr;
-    Saver *saver = nullptr;
+    Loader* loader = nullptr;
+    Saver* saver = nullptr;
 
     cmdline::init(argc, argv);
 
-    if(auto loader_type = cmdline::get("loader")) {
-        if(!std::strcmp(loader_type, "fsiter")) {
+    auto loader_type = cmdline::get("loader");
+    auto saver_type = cmdline::get("saver");
+
+    if(loader_type.size()) {
+        if(loader_type == "fsiter") {
             loader = new Loader_FSIter;
         }
-        else if(!std::strcmp(loader_type, "oneshot")) {
+        else if(loader_type == "oneshot") {
             loader = new Loader_OneShot;
         }
-        else if(!std::strcmp(loader_type, "sprintf")) {
+        else if(loader_type == "sprintf") {
             loader = new Loader_Sprintf;
         }
         else {
-            riteg_fatal << "Unknown loader type: " << loader_type << std::endl;
+            LOG_CRITICAL("unknown loader type: {}", loader_type);
             std::terminate();
         }
     }
 
-    if(auto saver_type = cmdline::get("saver")) {
-        if(!std::strcmp(saver_type, "oneshot")) {
+    if(saver_type.size()) {
+        if(saver_type == "oneshot") {
             saver = new Saver_OneShot;
         }
-        else if(!std::strcmp(saver_type, "sprintf")) {
+        else if(saver_type == "sprintf") {
             saver = new Saver_Sprintf;
         }
         else {
-            riteg_fatal << "Unknown saver type: " << saver_type << std::endl;
+            LOG_CRITICAL("unknown saver type: {}", saver_type);
             std::terminate();
         }
     }
@@ -69,8 +74,13 @@ int main(int argc, char **argv)
 
     cmdline::init_late();
 
-    if(loader) loader->init();
-    if(saver) saver->init();
+    if(loader) {
+        loader->init();
+    }
+
+    if(saver) {
+        saver->init();
+    }
 
     Timings timings;
     timings.current_time = glfwGetTime();

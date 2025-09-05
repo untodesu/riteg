@@ -1,12 +1,16 @@
 #include "riteg/pch.hh"
+
 #include "riteg/cmdline.hh"
 
 #include "riteg/project.hh"
 
-static int s_argc;
-static char **s_argv;
+namespace
+{
+int s_argc;
+char** s_argv;
+} // namespace
 
-void cmdline::init(int argc, char **argv)
+void cmdline::init(int argc, char** argv)
 {
     assert(argc > 0);
     assert(argv != nullptr);
@@ -15,7 +19,7 @@ void cmdline::init(int argc, char **argv)
     s_argv = argv;
 
     if(s_argc < 2) {
-        riteg_fatal << "usage: riteg <script> [options]" << std::endl;
+        LOG_CRITICAL("usage: riteg <script> [options]");
         std::terminate();
     }
 
@@ -42,33 +46,67 @@ void cmdline::deinit(void)
     s_argv = nullptr;
 }
 
-bool cmdline::contains(const char *option)
+bool cmdline::contains(std::string_view option)
 {
-    assert(option != nullptr);
+    assert(option.size());
 
     for(int i = 0; i < s_argc; ++i) {
-        if(s_argv[i][0] != '-')
+        std::string_view argument(s_argv[0]);
+
+        if(argument.empty() || argument[0] != '-') {
+            // Not an option
             continue;
-        if(std::strcmp(&s_argv[i][1], option))
-            continue;
-        return true;
+        }
+
+        if(0 == option.compare(argument.substr(1))) {
+            return true;
+        }
     }
 
     return false;
 }
 
-const char *cmdline::get(const char *option, const char *fallback)
+std::string_view cmdline::get(std::string_view option, std::string_view fallback)
 {
-    assert(option != nullptr);
+    assert(option.size());
 
     for(int i = 0; i < s_argc; ++i) {
-        if(s_argv[i][0] != '-')
+        std::string_view argument(s_argv[i]);
+
+        if(argument.empty() || argument[0] != '-') {
+            // Not an option
             continue;
-        if(std::strcmp(&s_argv[i][1], option))
-            continue;
-        if(i + 1 >= s_argc)
+        }
+
+        if(0 == option.compare(argument.substr(1))) {
+            if(i + 1 < s_argc) {
+                return s_argv[i + 1];
+            }
+
             return fallback;
-        return s_argv[i + 1];
+        }
+    }
+
+    return fallback;
+}
+
+const char* cmdline::get_cstr(const char* option, const char* fallback)
+{
+    assert(option);
+
+    for(int i = 0; i < s_argc; ++i) {
+        if(s_argv[i][0] != '-') {
+            // Not an option
+            continue;
+        }
+
+        if(0 == std::strcmp(&s_argv[i][1], option)) {
+            if(i + 1 < s_argc) {
+                return s_argv[i + 1];
+            }
+
+            return fallback;
+        }
     }
 
     return fallback;

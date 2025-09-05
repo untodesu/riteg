@@ -1,4 +1,5 @@
 #include "riteg/pch.hh"
+
 #include "riteg/shader.hh"
 
 #include "riteg/shader_bits.hh"
@@ -7,7 +8,7 @@
 static GLuint s_vertex_array_object;
 static GLuint s_vertex_shader;
 
-static GLuint compile_shader(unsigned int type, const std::vector<const char*> &sources)
+static GLuint compile_shader(unsigned int type, const std::vector<const char*>& sources)
 {
     assert(type == GL_VERTEX_SHADER || type == GL_FRAGMENT_SHADER);
     assert(sources.size() >= 1);
@@ -22,14 +23,14 @@ static GLuint compile_shader(unsigned int type, const std::vector<const char*> &
     if(info_log_length > 2) {
         std::basic_string<GLchar> info_log(info_log_length, GLchar(0x00));
         glGetShaderInfoLog(shader, info_log_length, nullptr, info_log.data());
-        riteg_info << "Shader information: " << std::endl << info_log << std::endl;
+        LOG_INFO("shader information: {}", info_log);
     }
 
     GLint compile_status;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &compile_status);
 
     if(compile_status == GL_FALSE) {
-        riteg_info << "Shader compilation failed" << std::endl;
+        LOG_INFO("shader compilation failed");
         glDeleteShader(shader);
         return 0;
     }
@@ -37,18 +38,22 @@ static GLuint compile_shader(unsigned int type, const std::vector<const char*> &
     return shader;
 }
 
-Shader::Shader(int width, int height, const char *source) : m_target_width(width), m_target_height(height)
+Shader::Shader(int width, int height, const std::string& source) : m_target_width(width), m_target_height(height)
 {
     assert(width > 0);
     assert(height > 0);
-    assert(source != nullptr);
 
-    m_fragment_shader = compile_shader(GL_FRAGMENT_SHADER, {
-        GLSL_VERSION_SHADER_BIT, FRAG_RITEG_SHADER_BIT, FRAG_SHADERTOY_HEADER_SHADER_BIT, source, FRAG_SHADERTOY_FOOTER_SHADER_BIT
-    });
+    std::vector<const char*> sources;
+    sources.emplace_back(GLSL_VERSION_SHADER_BIT);
+    sources.emplace_back(FRAG_RITEG_SHADER_BIT);
+    sources.emplace_back(FRAG_SHADERTOY_HEADER_SHADER_BIT);
+    sources.emplace_back(source.c_str());
+    sources.emplace_back(FRAG_SHADERTOY_FOOTER_SHADER_BIT);
+
+    m_fragment_shader = compile_shader(GL_FRAGMENT_SHADER, sources);
 
     if(!m_fragment_shader) {
-        riteg_fatal << "Fragment shader compilation failed" << std::endl;
+        LOG_CRITICAL("fragment shader compilation failed");
         std::terminate();
     }
 
@@ -63,14 +68,14 @@ Shader::Shader(int width, int height, const char *source) : m_target_width(width
     if(info_log_length > 2) {
         std::basic_string<GLchar> info_log(info_log_length, GLchar(0x00));
         glGetProgramInfoLog(m_program, info_log_length, nullptr, info_log.data());
-        riteg_info << "Program information: " << std::endl << info_log << std::endl;
+        LOG_INFO("program information: {}", info_log);
     }
 
     GLint link_status;
     glGetProgramiv(m_program, GL_LINK_STATUS, &link_status);
 
     if(link_status == GL_FALSE) {
-        riteg_fatal << "Program linking failed" << std::endl;
+        LOG_CRITICAL("program linking failed");
         std::terminate();
     }
 
@@ -144,7 +149,7 @@ int Shader::get_texture_height(void) const
     return m_target_height;
 }
 
-void Shader::render(const Timings &timings)
+void Shader::render(const Timings& timings)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, m_target_fbo);
     glViewport(0, 0, m_target_width, m_target_height);
@@ -152,15 +157,13 @@ void Shader::render(const Timings &timings)
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(m_program);
-    glUniform3f(u_iResolution, m_target_width, m_target_height,
-        static_cast<float>(m_target_width) / static_cast<float>(m_target_height));
+    glUniform3f(u_iResolution, m_target_width, m_target_height, static_cast<float>(m_target_width) / static_cast<float>(m_target_height));
     glUniform1f(u_iTime, timings.current_time);
     glUniform1f(u_iTimeDelta, timings.delta_time);
     glUniform1f(u_iFrame, timings.frame_count);
 
     glUniform4f(u_iMouse, 0.0f, 0.0f, 0.0f, 0.0f); // Unsupported in RITEG
-    glUniform4f(u_iDate, 0.0f, 0.0f, 0.0f, 0.0f); // Unsupported in RITEG
-
+    glUniform4f(u_iDate, 0.0f, 0.0f, 0.0f, 0.0f);  // Unsupported in RITEG
 
     for(int i = 0; i < MAX_CHANNELS; ++i) {
         if(m_channels[i]) {
@@ -186,7 +189,7 @@ void Shader::render(const Timings &timings)
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
-void Shader::setChannel(int channel, const Source *source)
+void Shader::setChannel(int channel, const Source* source)
 {
     assert(channel >= 0 && channel < MAX_CHANNELS);
 
@@ -198,7 +201,7 @@ void Shader::init(void)
     s_vertex_shader = compile_shader(GL_VERTEX_SHADER, { GLSL_VERSION_SHADER_BIT, VERT_ENTRYPOINT_SHADER_BIT });
 
     if(!s_vertex_shader) {
-        riteg_fatal << "Vertex shader compilation failed" << std::endl;
+        LOG_CRITICAL("vertex shader compilation faield");
         std::terminate();
     }
 

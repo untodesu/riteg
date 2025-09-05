@@ -1,4 +1,5 @@
 #include "riteg/pch.hh"
+
 #include "riteg/image.hh"
 
 Image::Image(void) : m_texture_width(0), m_texture_height(0)
@@ -31,12 +32,12 @@ int Image::get_texture_height(void) const
     return m_texture_height;
 }
 
-void Image::render(const Timings &timings)
+void Image::render(const Timings& timings)
 {
     // empty
 }
 
-bool Image::load_RGBA(const std::filesystem::path &path)
+bool Image::load_RGBA(const std::filesystem::path& path)
 {
     assert(!path.empty());
 
@@ -53,7 +54,6 @@ bool Image::load_RGBA(const std::filesystem::path &path)
         return true;
     }
 
-    riteg_warning << "Image: " << path.string() << ": " << stbi_failure_reason() << std::endl;
-
+    LOG_WARNING("{}: {}", path.string(), stbi_failure_reason());
     return false;
 }

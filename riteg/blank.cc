@@ -1,8 +1,12 @@
 #include "riteg/pch.hh"
+
 #include "riteg/blank.hh"
 
-constexpr static int BLANK_WIDTH = 16;
-constexpr static int BLANK_HEIGHT = 16;
+namespace
+{
+constexpr int BLANK_WIDTH = 16;
+constexpr int BLANK_HEIGHT = 16;
+} // namespace
 
 Blank::Blank(void) : Blank(0, 0, 0)
 {
@@ -17,7 +21,7 @@ Blank::Blank(int red, int green, int blue)
 
     std::byte pixels[BLANK_WIDTH * BLANK_HEIGHT * 4];
 
-    for (int i = 0; i < BLANK_WIDTH * BLANK_HEIGHT; ++i) {
+    for(int i = 0; i < BLANK_WIDTH * BLANK_HEIGHT; ++i) {
         pixels[i * 4 + 0] = static_cast<std::byte>(red);
         pixels[i * 4 + 1] = static_cast<std::byte>(green);
         pixels[i * 4 + 2] = static_cast<std::byte>(blue);
@@ -58,7 +62,7 @@ int Blank::get_texture_height(void) const
     return BLANK_HEIGHT;
 }
 
-void Blank::render(const Timings &timings)
+void Blank::render(const Timings& timings)
 {
     // empty
 }

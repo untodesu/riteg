@@ -1,6 +1,4 @@
 /.vscode/*
-/build32/
-/build64/
 /build/
 /*.dll
 /*.exe

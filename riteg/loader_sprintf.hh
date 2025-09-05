@@ -1,5 +1,3 @@
-#ifndef RITEG_LOADER_SPRINTF_HH
-#define RITEG_LOADER_SPRINTF_HH 1
 #pragma once
 
 #include "riteg/loader.hh"
@@ -17,7 +15,3 @@ private:
     std::size_t m_limit;
     bool m_is_done;
 };
-
-
-
-#endif /* RITEG_LOADER_SPRINTF_HH */

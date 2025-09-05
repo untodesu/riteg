@@ -1,4 +1,5 @@
 #include "riteg/pch.hh"
+
 #include "riteg/loader_sprintf.hh"
 
 #include "riteg/cmdline.hh"
@@ -9,10 +10,24 @@ void Loader_Sprintf::init(void)
     auto sprintf_format = cmdline::get("iformat");
     auto sprintf_limit = cmdline::get("imaxframes");
 
-    riteg_force_assert_msg(sprintf_format, "Invalid argument [iformat]");
+    riteg_force_assert_msg(sprintf_format.size(), "Invalid argument [iformat]");
 
     m_format = sprintf_format;
-    m_limit = sprintf_limit ? std::stoul(sprintf_limit) : SIZE_MAX;
+
+    if(sprintf_format.empty()) {
+        m_limit = SIZE_MAX;
+    }
+    else {
+        std::size_t parsed_limit;
+        auto result = std::from_chars(sprintf_limit.data(), sprintf_limit.data() + sprintf_limit.size(), parsed_limit);
+
+        if(result.ec == std::errc()) {
+            m_limit = parsed_limit;
+        }
+        else {
+            m_limit = SIZE_MAX;
+        }
+    }
 
     riteg_force_assert_msg(m_limit > 0, "Invalid argument [imaxframes]");
 

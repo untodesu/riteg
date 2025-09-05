@@ -1,5 +1,3 @@
-#ifndef RITEG_SOURCE_HH
-#define RITEG_SOURCE_HH 1
 #pragma once
 
 struct Timings;
@@ -17,7 +15,5 @@ public:
     virtual GLuint get_framebuffer(void) const = 0;
     virtual int get_texture_width(void) const = 0;
     virtual int get_texture_height(void) const = 0;
-    virtual void render(const Timings &timings) = 0;
+    virtual void render(const Timings& timings) = 0;
 };
-
-#endif /* RITEG_SOURCE_HH */

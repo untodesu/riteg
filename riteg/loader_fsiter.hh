@@ -1,5 +1,3 @@
-#ifndef RITEG_LOADER_FSITER_HH
-#define RITEG_LOADER_FSITER_HH 1
 #pragma once
 
 #include "riteg/loader.hh"
@@ -13,5 +11,3 @@ public:
 private:
     std::queue<std::filesystem::path> m_paths;
 };
-
-#endif /* RITEG_LOADER_FSITER_HH */

@@ -1,5 +1,3 @@
-#ifndef RITEG_IMAGE_HH
-#define RITEG_IMAGE_HH 1
 #pragma once
 
 #include "riteg/source.hh"
@@ -13,14 +11,12 @@ public:
     virtual GLuint get_framebuffer(void) const override;
     virtual int get_texture_width(void) const override;
     virtual int get_texture_height(void) const override;
-    virtual void render(const Timings &timings) override;
+    virtual void render(const Timings& timings) override;
 
-    bool load_RGBA(const std::filesystem::path &path);
+    bool load_RGBA(const std::filesystem::path& path);
 
 private:
     GLuint m_texture;
     int m_texture_width;
     int m_texture_height;
 };
-
-#endif /* RITEG_IMAGE_HH */

@@ -1,5 +1,3 @@
-#ifndef RITEG_BLANK_HH
-#define RITEG_BLANK_HH 1
 #pragma once
 
 #include "riteg/source.hh"
@@ -14,10 +12,8 @@ public:
     virtual GLuint get_framebuffer(void) const override;
     virtual int get_texture_width(void) const override;
     virtual int get_texture_height(void) const override;
-    virtual void render(const Timings &timings) override;
+    virtual void render(const Timings& timings) override;
 
 private:
     GLuint m_texture;
 };
-
-#endif /* RITEG_BLANK_HH */

@@ -1,16 +1,19 @@
 #include "riteg/pch.hh"
+
 #include "riteg/saver.hh"
 
 #include "riteg/source.hh"
 
-bool Saver::write_source_RGBA(const Source *source, const std::filesystem::path &path)
+bool Saver::write_source_RGBA(const Source* source, const std::filesystem::path& path)
 {
     static std::vector<std::byte> s_cache;
 
     assert(source != nullptr);
 
     std::string extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(), [](char character) { return std::tolower(character); });
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](char character) {
+        return std::tolower(character);
+    });
 
     auto width = source->get_texture_width();
     auto height = source->get_texture_height();

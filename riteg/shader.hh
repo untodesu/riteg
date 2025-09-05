@@ -1,5 +1,3 @@
-#ifndef RITEG_SHADER_HH
-#define RITEG_SHADER_HH 1
 #pragma once
 
 #include "riteg/source.hh"
@@ -13,17 +11,20 @@ public:
 
     constexpr static std::size_t MAX_CHANNELS = 4;
 
-public:
-    explicit Shader(int width, int height, const char *source);
+    static void init(void);
+    static void deinit(void);
+    static void beginFrame(void);
+
+    explicit Shader(int width, int height, const std::string& source);
     virtual ~Shader(void) override;
 
     virtual GLuint get_texture(void) const override;
     virtual GLuint get_framebuffer(void) const override;
     virtual int get_texture_width(void) const override;
     virtual int get_texture_height(void) const override;
-    virtual void render(const Timings &timings) override;
+    virtual void render(const Timings& timings) override;
 
-    void setChannel(int channel, const Source *source);
+    void setChannel(int channel, const Source* source);
 
 private:
     GLuint m_program;
@@ -34,9 +35,8 @@ private:
     GLuint m_target_fbo;
     GLuint m_target_texture;
 
-    const Source *m_channels[MAX_CHANNELS];
+    const Source* m_channels[MAX_CHANNELS];
 
-private:
     GLint u_iResolution;
     GLint u_iTime;
     GLint u_iTimeDelta;
@@ -46,11 +46,4 @@ private:
     GLint u_iDate;
     GLint u_iChannelResolution[MAX_CHANNELS];
     GLint u_iChannel[MAX_CHANNELS];
-
-public:
-    static void init(void);
-    static void deinit(void);
-    static void beginFrame(void);
 };
-
-#endif /* RITEG_SHADER_HH */
