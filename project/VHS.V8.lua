@@ -13,6 +13,11 @@
 --  VHS Compression: https://www.shadertoy.com/view/tsfXWj
 --  NTSC Filter: https://www.shadertoy.com/view/wlScWG
 
+print("VHS.V8 filter by untodesu")
+print("Based on mostly own work from 2022 with the following bits:")
+print("- VHS compression: https://www.shadertoy.com/view/tsfXWj by mpalko")
+print("- NTSC filter: https://www.shadertoy.com/view/wlScWG by Hatchling")
+
 -- Specify base resolution at which the filter
 -- actually operates. This has nothing to do with
 -- the output resolution, although output defaults to base
@@ -22,6 +27,13 @@ local base_tall <const> = 480
 -- Specify the output resolution of the filter
 local out_wide = math.min(math.max(riteg.get_option_number("output-width", base_wide), 320), 2560)
 local out_tall = math.min(math.max(riteg.get_option_number("output-height", base_tall), 240), 1920)
+
+-- Ensure we set up the random generator with a unique
+-- seed every time so the generational loss does not just
+-- overlay; I had an idea to use the seed in shaders but didn't
+-- read into lua documentation enough to find out one has to initialize
+-- the RNG before calling math.random [untodesu, 2025-09-05]
+math.randomseed(os.time())
 
 -- A bunch of GLSL code that is shared between all the
 -- passes in the filter pipeline; this contains bits from
@@ -33,7 +45,8 @@ local common_glsl <const> = string.format([[
 
     // Increasing this value increases ringing artifacts.
     // Careful, higher values are expensive.
-    const int WINDOW_RADIUS = 20;
+    const int DECODE_WINDOW_WIDTH = 16;
+    const int ENCODE_WINDOW_WIDTH = 4;
 
     // Simulated AM signal transmission.
     const float AM_CARRIERSIGNAL_WAVELENGTH = 2.0;
@@ -61,19 +74,19 @@ local common_glsl <const> = string.format([[
 
     const float NTSC_SCALE = 1.0; // Change the overall scale of the NTSC-style encoding and decoding artifacts
     const float PHASE_ALTERNATION = PI; // PI for PAL-like
-    const float NOISE_STRENGTH = 0.00625; // Amount of TV static
-    const float SATURATION = 2.0; // Saturation control
+    const float NOISE_STRENGTH = 0.015625; // Amount of TV static
+    const float SATURATION = 3.0; // Saturation control
     const float WINDOW_BIAS = 0.0; // Offsets shape of window. This can make artifacts smear to one side or the other.
 
     const float VHS_CUTOFF = 0.01;
     const float VHS_DROPOUT_STRENGTH = 0.000001;
-    const int VHS_DROPOUT_BLUR_STEPS = 32;
+    const int VHS_DROPOUT_BLUR_STEPS = 64;
 
-    const vec2 VHS_MAXRES_Y = vec2(640.0, 480.0);
+    const vec2 VHS_MAXRES_Y = vec2(333.0, 480.0);
     const vec2 VHS_MAXRES_IQ = vec2(40.0, 480.0);
     const vec2 VHS_BLUR_AMT = vec2(0.2, 0.2);
 
-    const float GAMMA_CORRECTION = 0.75;
+    const float GAMMA_CORRECTION = 1.0;
 
     const mat3 RGB_TO_YIQ = mat3(0.299, 0.587, 0.114, 0.595, -0.274, -0.3213, 0.2115,-0.5227, 0.3112);
     const mat3 YIQ_TO_RGB = mat3(1.0, 0.956, 0.619, 1.0, -0.272, -0.647, 1.0, -1.106, 1.703);
@@ -122,10 +135,9 @@ local common_glsl <const> = string.format([[
     float NTSC_fullEncode(sampler2D sampler, in vec2 uv, in float pixelWidth, bool alternatePhase)
     {
         vec3 yiq = vec3(0.0, 0.0, 0.0);
-        float windowWeight = 0.0;
 
-        for(int i = -WINDOW_RADIUS; i <= WINDOW_RADIUS; ++i) {
-            float window = NTSC_cosineWindow(float(i) / float(WINDOW_RADIUS + 1)); 
+        for(int i = -ENCODE_WINDOW_WIDTH; i <= ENCODE_WINDOW_WIDTH; ++i) {
+            float window = NTSC_cosineWindow(float(i) / float(ENCODE_WINDOW_WIDTH + 1)); 
             float sincY = NTSC_sinc(float(i) / YLOWPASS_WAVELENGTH) / YLOWPASS_WAVELENGTH;
             float sincI = NTSC_sinc(float(i) / ILOWPASS_WAVELENGTH) / ILOWPASS_WAVELENGTH;
             float sincQ = NTSC_sinc(float(i) / QLOWPASS_WAVELENGTH) / QLOWPASS_WAVELENGTH;
@@ -136,7 +148,6 @@ local common_glsl <const> = string.format([[
             yiq.x += yiqSample.x * sincY * window;
             yiq.y += yiqSample.y * sincI * window;
             yiq.z += yiqSample.z * sincQ * window;
-            windowWeight += window;
         }
 
         float phase = uv.x * PI / (COLORBURST_WAVELENGTH_ENCODER * pixelWidth);
@@ -152,8 +163,8 @@ local common_glsl <const> = string.format([[
         float windowWeight = 0.0;
         float decoded = 0.0;
 
-        for(int i = -WINDOW_RADIUS; i <= WINDOW_RADIUS; ++i) {
-            float window = NTSC_cosineWindow(float(i) / float(WINDOW_RADIUS+1));
+        for(int i = -DECODE_WINDOW_WIDTH; i <= DECODE_WINDOW_WIDTH; ++i) {
+            float window = NTSC_cosineWindow(float(i) / float(DECODE_WINDOW_WIDTH+1));
 
             vec2 uvWithOffset = vec2(uv.x + float(i) * pixelWidth, uv.y);
 
@@ -185,8 +196,8 @@ local common_glsl <const> = string.format([[
         float alt = alternatePhase ? PHASE_ALTERNATION : 0.0;
         float windowWeight = 0.0;
 
-        for(int i = -WINDOW_RADIUS; i <= WINDOW_RADIUS; ++i) {
-            float window = NTSC_cosineWindow(float(i) / float(WINDOW_RADIUS+1)); 
+        for(int i = -DECODE_WINDOW_WIDTH; i <= DECODE_WINDOW_WIDTH; ++i) {
+            float window = NTSC_cosineWindow(float(i) / float(DECODE_WINDOW_WIDTH+1)); 
             vec2 uvWithOffset = vec2(uv.x + float(i) * pixelWidth, uv.y);
             vec2 originalUVWithOffset = vec2(originalUV.x + float(i) * pixelWidth, originalUV.y);
             float phase = originalUVWithOffset.x * PI / ((COLORBURST_WAVELENGTH_DECODER + frequencyNoise) * pixelWidth) + phaseNoise + alt;
@@ -461,7 +472,7 @@ local vhs_sharpen = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
     }
 ]], { iChannel0 = vhs_upsample_combined })
 
-local vhs_dropout = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_dropout = riteg.create_shader(base_wide / 2, base_tall, common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         uint rngState = Common_newRngState(fragCoord);
@@ -520,6 +531,7 @@ local vhs_headswitch = riteg.create_shader(base_wide, base_tall, common_glsl .. 
     #define P1 30.00000
     #define P2 3.000000
     #define P3 0.062500
+    #define P4 0.500000
 
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
@@ -540,7 +552,11 @@ local vhs_headswitch = riteg.create_shader(base_wide, base_tall, common_glsl .. 
             fragColor.yz *= clamp(1.0 - 25.0 * kjig, 0.0, 1.0);
         }
         else {
-            fragColor = texture(iChannel0, uv);
+            float jiggle = P4 * Common_randomFloat(rngStateRow) / iResolution.x;
+            vec2 uvmod = vec2(uv.x + jiggle, uv.y);
+            if((uvmod.x < 0.0) || (uvmod.x > 1.0))
+                fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            else fragColor = texture(iChannel0, uvmod);
         }
     }
 ]], { iChannel0 = vhs_dropout_combined })

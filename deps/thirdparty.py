@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
+import os
+
 # It is quite annoying to have to write all the dependency notices
 # by hand, so this script goes through the dependency list and generates
 # a file with all the licenses automatically during the build process
-
-OUT_FILE = "thirdpartylegalnotices.txt"
-OUT_PROJECT = "RITEG"
-
-import os
 
 def read_description_file(subdirectory):
     description_filename = "DESCRIPTION"
@@ -17,6 +14,7 @@ def read_description_file(subdirectory):
         if os.path.exists(fill_path):
             with open(fill_path, 'r', encoding='utf-8') as file:
                 return file.read().rstrip().splitlines()[0]
+    return None
 
 def read_license_file(subdirectory):
     license_filenames = [ "LICENSE", "COPYING", "NOTICE" ]
@@ -47,14 +45,14 @@ dependencies_dir = os.sys.argv[1]
 dependencies = get_dependencies(dependencies_dir)
 assert len(dependencies) > 0, "No licenses found in the dependencies directory."
 
-with open(OUT_FILE, 'w', encoding='utf-8') as out_file:
-    out_file.write(f"{OUT_PROJECT} uses third-party code for certain functions. All the\n")
+with open("thirdparty.txt", 'w', encoding='utf-8') as out_file:
+    out_file.write("RITEG uses third-party code for certain functions. All the\n")
     out_file.write("license texts are included below using an automated script; this generated\n")
     out_file.write("file is to be included in binary distributions of the project.\n\n")
 
     for name, license, description in dependencies:
         out_file.write(f"{'=' * 80}\n")
-        if len(description) > 0:
+        if description and len(description) > 0:
             out_file.write(f"{name} - {description}\n")
         else:
             out_file.write(f"{name}\n")

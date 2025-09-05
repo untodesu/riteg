@@ -12,6 +12,9 @@ RITEG stands for Real-time-ish Image Translation enhanced with GLSL
 # Example: Shadertoy compatibility
 ![](02.project.img.00.png)  
 
+# Example: VHS 4:3 (video)
+![](project.vhs43.01.mp4)  
+
 # Example: VHS 4:3
 ![](project.vhs43.01.png)  
 ![](project.vhs43.02.png)  

@@ -16,21 +16,8 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 ## avoid pulling redistributable installers alongside the game package
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_subdirectory(deps/glad)
-add_subdirectory(deps/glfw)
-add_subdirectory(deps/imgui)
-add_subdirectory(deps/lua)
-add_subdirectory(deps/stb)
-
+add_subdirectory(deps)
 add_subdirectory(riteg)
-
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-add_custom_target(thirdpartylegalnotices ALL
-    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/thirdpartylegalnotices.py" "${CMAKE_CURRENT_LIST_DIR}/deps"
-    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/thirdpartylegalnotices.txt"
-    DEPENDS "${CMAKE_CURRENT_LIST_DIR}/thirdpartylegalnotices.py"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/thirdpartylegalnotices.txt" DESTINATION ".")
 
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/LICENSE.txt" DESTINATION ".")
 install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/project" DESTINATION ".")
