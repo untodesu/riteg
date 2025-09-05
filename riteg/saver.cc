@@ -28,13 +28,13 @@ bool Saver::write_source_RGBA(const Source* source, const std::filesystem::path&
 
     stbi_flip_vertically_on_write(true);
 
-    if(!std::strcmp(extension.c_str(), ".png"))
+    if(0 == std::strcmp(extension.c_str(), ".png"))
         return stbi_write_png(path.string().c_str(), width, height, 4, s_cache.data(), width * 4);
-    if(!std::strcmp(extension.c_str(), ".jpg") || !std::strcmp(extension.c_str(), ".jpeg"))
+    if(0 == std::strcmp(extension.c_str(), ".jpg") || !std::strcmp(extension.c_str(), ".jpeg"))
         return stbi_write_jpg(path.string().c_str(), width, height, 4, s_cache.data(), 100);
-    if(!std::strcmp(extension.c_str(), ".bmp"))
+    if(0 == std::strcmp(extension.c_str(), ".bmp"))
         return stbi_write_bmp(path.string().c_str(), width, height, 4, s_cache.data());
-    if(!std::strcmp(extension.c_str(), ".tga"))
+    if(0 == std::strcmp(extension.c_str(), ".tga"))
         return stbi_write_tga(path.string().c_str(), width, height, 4, s_cache.data());
     return false;
 }
