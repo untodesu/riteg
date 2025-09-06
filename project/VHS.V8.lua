@@ -75,12 +75,12 @@ local common_glsl <const> = string.format([[
     const float NTSC_SCALE = 1.0; // Change the overall scale of the NTSC-style encoding and decoding artifacts
     const float PHASE_ALTERNATION = PI; // PI for PAL-like
     const float NOISE_STRENGTH = 0.015625; // Amount of TV static
-    const float SATURATION = 4.0; // Saturation control
+    const float SATURATION = 3.0; // Saturation control
     const float WINDOW_BIAS = 0.0; // Offsets shape of window. This can make artifacts smear to one side or the other.
 
     const float VHS_CUTOFF = 0.01;
     const float VHS_DROPOUT_STRENGTH = 0.000001;
-    const int VHS_DROPOUT_BLUR_STEPS = 64;
+    const int VHS_DROPOUT_BLUR_STEPS = 32;
 
     const vec2 VHS_MAXRES_Y = vec2(333.0, 480.0);
     const vec2 VHS_MAXRES_IQ = vec2(40.0, 480.0);
@@ -478,11 +478,12 @@ local vhs_dropout = riteg.create_shader(base_wide / 2, base_tall, common_glsl ..
         uint rngState = Common_newRngState(fragCoord);
 
         float dropout = 2.0 * Common_randomFloat(rngState) - 1.0;
+        float smear = 1.0 - 0.9 * fragCoord.y / iResolution.y;
 
         uint rngStateI = Common_newRngState(vec2(dropout, fragCoord.x));
         uint rngStateQ = Common_newRngState(vec2(dropout, fragCoord.y));
 
-        fragColor.x = step(1.0 - clamp(VHS_DROPOUT_STRENGTH, 0.0, 1.0), dropout);
+        fragColor.x = step(1.0 - clamp(smear * VHS_DROPOUT_STRENGTH, 0.0, 1.0), dropout);
         fragColor.y = 2.0 * Common_randomFloat(rngStateI) - 1.0;
         fragColor.z = 2.0 * Common_randomFloat(rngStateQ) - 1.0;
         fragColor.w = 1.0;
