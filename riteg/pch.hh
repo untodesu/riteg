@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <charconv>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <mutex>
