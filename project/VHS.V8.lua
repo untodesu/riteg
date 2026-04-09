@@ -74,7 +74,7 @@ local common_glsl <const> = string.format([[
 
     const float NTSC_SCALE = 1.0; // Change the overall scale of the NTSC-style encoding and decoding artifacts
     const float PHASE_ALTERNATION = PI; // PI for PAL-like
-    const float NOISE_STRENGTH = 0.015625; // Amount of TV static
+    const float NOISE_STRENGTH = 0.25*0.015625; // Amount of TV static
     const float SATURATION = 5.0; // Saturation control
     const float WINDOW_BIAS = 0.0; // Offsets shape of window. This can make artifacts smear to one side or the other.
 
@@ -438,8 +438,8 @@ local vhs_upsample = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
         vec2 uvLuminance = uv * (resLuminance / vec2(iResolution));
         vec2 uvChroma = uv * (resChroma / vec2(iResolution));
         
-        float luminance = VHS_textureBicubic(iChannel1, uvLuminance).x;
-        vec2 chroma = VHS_textureBicubic(iChannel1, uvChroma).yz;
+        float luminance = VHS_textureBicubic(iChannel0, uvLuminance).x;
+        vec2 chroma = VHS_textureBicubic(iChannel0, uvChroma).yz;
         
         fragColor = vec4(luminance, chroma, 1.0);
     }
@@ -600,7 +600,7 @@ local final_rgb = riteg.create_shader(out_wide, out_tall, common_glsl .. [[
     {
         vec2 uv = fragCoord / iResolution.xy;
         vec4 color = texture(iChannel0, uv);
-        fragColor.rgb = color.xyz * YIQ_TO_RGB;
+        fragColor.rgb = YIQ_TO_RGB * color.xyz;
         fragColor.a = 1.0;
     }
 ]], { iChannel0 = ntsc_post_vcr_decode_iq })
