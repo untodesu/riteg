@@ -1,6 +1,6 @@
 site_name: RITEG
-site_url: https://untodesu.github.io/riteg
-repo_url: https://github.com/untodesu/riteg
+site_url: https://untodesu.codeberg.page/riteg
+repo_url: https://codeberg.org/untodesu/riteg
 repo_name: untodesu/riteg
 theme:
   name: material
