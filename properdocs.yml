@@ -1,0 +1,23 @@
+site_name: RITEG
+site_url: https://untodesu.github.io/riteg
+repo_url: https://github.com/untodesu/riteg
+repo_name: untodesu/riteg
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        name: Switch to dark mode
+        icon: material/brightness-7
+      primary: pink
+      accent: pink
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        name: Switch to light mode
+        icon: material/brightness-4
+      primary: pink
+      accent: pink
+  favicon: app_icon.png
+  logo: app_icon.png
