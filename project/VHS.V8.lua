@@ -67,10 +67,17 @@ local deck_noise = math.min(math.max(riteg.get_option_number("noise", 0.7 + 0.6 
 local deck_sharpness = math.min(math.max(riteg.get_option_number("sharpness", 0.7 + 0.6 * deck_unit(2)), 0.0), 2.0)
 local deck_wow = math.min(math.max(riteg.get_option_number("wow", 0.7 + 0.6 * deck_unit(3)), 0.0), 2.0)
 local deck_tracking = math.min(math.max(riteg.get_option_number("tracking", 0.7 + 0.6 * deck_unit(4)), 0.0), 2.0)
+local deck_bandwidth = math.min(math.max(riteg.get_option_number("bandwidth", 0.05 + 0.25 * deck_unit(5)), 0.0), 1.0)
+
+local tape_grain = math.min(math.max(riteg.get_option_number("grain", 0.02), 0.0), 0.2)
+local tape_aspect = base_wide / base_tall
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%d deck=%d wear=%.3f level=%.4f noise=%.3f sharpness=%.3f wow=%.3f tracking=%.3f",
-    tape_seed, deck_seed, tape_wear, output_level, deck_noise, deck_sharpness, deck_wow, deck_tracking))
+    "VHS hop: tape=%d deck=%d wear=%.3f grain=%.4f level=%.4f",
+    tape_seed, deck_seed, tape_wear, tape_grain, output_level))
+riteg.log_info(string.format(
+    "VHS deck: noise=%.3f sharpness=%.3f wow=%.3f tracking=%.3f bandwidth=%.3f",
+    deck_noise, deck_sharpness, deck_wow, deck_tracking, deck_bandwidth))
 
 -- A bunch of GLSL code that is shared between all the
 -- passes in the filter pipeline; this contains bits from
@@ -83,13 +90,16 @@ local common_glsl <const> = string.format([[
 
     // Physical condition of the tape, derived from -tape or -wear.
     const float TAPE_WEAR = %.4f;
+    const float TAPE_GRAIN = %.4f;
+    const float TAPE_ASPECT = %.4f;
 
     // Deck transfer function: derived from -deck, overridable with
-    // -noise, -sharpness, -wow and -tracking.
+    // -noise, -sharpness, -wow, -tracking and -bandwidth.
     const float DECK_NOISE = %.4f;
     const float DECK_SHARPNESS = %.4f;
     const float DECK_WOW = %.4f;
     const float DECK_TRACKING = %.4f;
+    const float DECK_BANDWIDTH = %.4f;
 
     // Increasing this value increases ringing artifacts.
     // Careful, higher values are expensive.
@@ -193,6 +203,49 @@ local common_glsl <const> = string.format([[
     float Common_randomFloat(inout uint state)
     {
         return float(Common_wangHash(state)) / 4294967296.0;
+    }
+
+    // Tape surface space: normalized image coordinates with a uniform
+    // physical scale, so a defect has the same size at any resolution.
+    vec2 Tape_coords(vec2 uv)
+    {
+        return vec2(uv.x * TAPE_ASPECT, uv.y);
+    }
+
+    float Tape_gridNoise(vec2 p, uint salt)
+    {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+
+        uint sa = Common_tapeRng(i, salt);
+        uint sb = Common_tapeRng(i + vec2(1.0, 0.0), salt);
+        uint sc = Common_tapeRng(i + vec2(0.0, 1.0), salt);
+        uint sd = Common_tapeRng(i + vec2(1.0, 1.0), salt);
+
+        float a = Common_randomFloat(sa);
+        float b = Common_randomFloat(sb);
+        float c = Common_randomFloat(sc);
+        float d = Common_randomFloat(sd);
+
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+
+    // Multi-scale wear/oxide map. 0 is a clean patch, 1 is badly worn.
+    float Tape_surface(vec2 uv)
+    {
+        vec2 p = Tape_coords(uv);
+        return 0.55 * Tape_gridNoise(p * 6.0, 20U)
+             + 0.30 * Tape_gridNoise(p * 18.0, 21U)
+             + 0.15 * Tape_gridNoise(p * 54.0, 22U);
+    }
+
+    // Fixed grain of the tape itself: the same every frame and copied
+    // into the next generation instead of being regenerated.
+    float Tape_grain(vec2 uv)
+    {
+        uint state = Common_tapeRng(Tape_coords(uv) * 2048.0, 30U);
+        return Common_randomFloat(state) - 0.5;
     }
     
     float NTSC_sinc(float x)
@@ -337,7 +390,7 @@ local common_glsl <const> = string.format([[
 
         return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
     }
-]], tape_seed, deck_seed, tape_wear, deck_noise, deck_sharpness, deck_wow, deck_tracking, output_level)
+]], tape_seed, deck_seed, tape_wear, tape_grain, tape_aspect, deck_noise, deck_sharpness, deck_wow, deck_tracking, deck_bandwidth, output_level)
 
 local function lowerpass_shader(dx, dy)
     return common_glsl .. string.format([[
@@ -541,7 +594,17 @@ local vhs_sharpen = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord.xy / iResolution.xy;
-        vec4 color = texture(iChannel0, uv);
+        vec2 pixel = 1.0 / iResolution.xy;
+
+        // Deck bandwidth: horizontal luma lowpass, then the existing
+        // high-frequency compensation. At 0 the deck is transparent.
+        vec4 center = texture(iChannel0, uv);
+        vec4 left = texture(iChannel0, uv - vec2(pixel.x, 0.0));
+        vec4 right = texture(iChannel0, uv + vec2(pixel.x, 0.0));
+        vec4 soft = 0.25 * left + 0.5 * center + 0.25 * right;
+        vec4 color = center;
+        color.x = mix(center.x, soft.x, DECK_BANDWIDTH);
+
         color += SHARPEN_AMOUNT * DECK_SHARPNESS * dFdx(color);
         color += SHARPEN_AMOUNT * DECK_SHARPNESS * dFdy(color);
         fragColor = color;
@@ -551,15 +614,17 @@ local vhs_sharpen = make_pass(common_glsl .. [[
 local vhs_dropout = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
-        uint rngState = Common_tapeRng(fragCoord, 0U);
+        vec2 uv = fragCoord / iResolution.xy;
+        float surface = Tape_surface(uv);
+        uint rngState = Common_tapeRng(Tape_coords(uv) * 512.0, 0U);
 
         float dropout = 2.0 * Common_randomFloat(rngState) - 1.0;
-        float smear = 1.0 - 0.9 * fragCoord.y / iResolution.y;
+        float smear = 1.0 - 0.9 * uv.y;
 
         uint rngStateI = Common_frameRng(vec2(dropout, fragCoord.x), 1U);
         uint rngStateQ = Common_frameRng(vec2(dropout, fragCoord.y), 2U);
 
-        float density = VHS_DROPOUT_STRENGTH * TAPE_WEAR * 1.6;
+        float density = VHS_DROPOUT_STRENGTH * TAPE_WEAR * (0.25 + 1.5 * surface);
         fragColor.x = step(1.0 - clamp(smear * density, 0.0, 1.0), dropout);
         fragColor.y = 2.0 * Common_randomFloat(rngStateI) - 1.0;
         fragColor.z = 2.0 * Common_randomFloat(rngStateQ) - 1.0;
@@ -570,14 +635,14 @@ local vhs_dropout = make_pass(common_glsl .. [[
 local vhs_dropout_blur = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
-        uint rngState = Common_tapeRng(fragCoord, 3U);
-
         vec2 uv = fragCoord.xy / iResolution.xy;
         vec2 pixel = 1.0 / iResolution.xy;
+        float surface = Tape_surface(uv);
+        uint rngState = Common_tapeRng(Tape_coords(uv) * 512.0, 3U);
 
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        int steps = int(VHS_DROPOUT_BLUR_STEPS * Common_randomFloat(rngState));
+        int steps = int(VHS_DROPOUT_BLUR_STEPS * (0.25 + 0.75 * surface) * Common_randomFloat(rngState));
 
         for(int i = 0; i < steps; ++i) {
             vec2 uvmod = vec2(uv.x - pixel.x * float(i), uv.y);
@@ -596,8 +661,9 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec2 uv = fragCoord.xy / iResolution.xy;
         vec4 color = texture(iChannel0, uv);
         vec4 dropout = texture(iChannel1, uv);
+        float grain = Tape_grain(uv) * TAPE_GRAIN * (0.5 + TAPE_WEAR);
         
-        fragColor.x = color.x + dropout.x;
+        fragColor.x = color.x + dropout.x + grain;
         fragColor.y = mix(color.y, 0.125 * dropout.y * dropout.x, dropout.x);
         fragColor.z = mix(color.z, 0.125 * dropout.z * dropout.x, dropout.x);
         fragColor.w = 1.0;
