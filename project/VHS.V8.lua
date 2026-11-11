@@ -54,8 +54,23 @@ local base_seed = math.floor(riteg.get_option_number("seed", os.time())) % 21474
 local tape_seed = math.floor(riteg.get_option_number("tape", base_seed)) % 2147483647
 local deck_seed = math.floor(riteg.get_option_number("deck", (base_seed * 1664525 + 1013904223) % 2147483647)) % 2147483647
 local output_level = math.min(math.max(riteg.get_option_number("level", 0.98), 0.0), 1.0)
+local tape_wear = math.min(math.max(riteg.get_option_number("wear", 0.3 + 0.4 * (tape_seed % 1000) / 1000), 0.0), 1.0)
 
-riteg.log_info(string.format("VHS hop: tape=%d deck=%d level=%.4f", tape_seed, deck_seed, output_level))
+-- The deck is a transfer function, not just a hash salt: its seed picks a
+-- stable character, and each parameter can be overridden explicitly.
+local function deck_unit(salt)
+    local mixed = ((deck_seed % 65536) * 65536 + (deck_seed // 65536) % 65536) * 1103515 + salt * 2654435761 + 1013904223
+    return (mixed % 2147483647) / 2147483647
+end
+
+local deck_noise = math.min(math.max(riteg.get_option_number("noise", 0.7 + 0.6 * deck_unit(1)), 0.0), 2.0)
+local deck_sharpness = math.min(math.max(riteg.get_option_number("sharpness", 0.7 + 0.6 * deck_unit(2)), 0.0), 2.0)
+local deck_wow = math.min(math.max(riteg.get_option_number("wow", 0.7 + 0.6 * deck_unit(3)), 0.0), 2.0)
+local deck_tracking = math.min(math.max(riteg.get_option_number("tracking", 0.7 + 0.6 * deck_unit(4)), 0.0), 2.0)
+
+riteg.log_info(string.format(
+    "VHS hop: tape=%d deck=%d wear=%.3f level=%.4f noise=%.3f sharpness=%.3f wow=%.3f tracking=%.3f",
+    tape_seed, deck_seed, tape_wear, output_level, deck_noise, deck_sharpness, deck_wow, deck_tracking))
 
 -- A bunch of GLSL code that is shared between all the
 -- passes in the filter pipeline; this contains bits from
@@ -65,6 +80,16 @@ local common_glsl <const> = string.format([[
 
     const uint TAPE_SEED = %dU;
     const uint DECK_SEED = %dU;
+
+    // Physical condition of the tape, derived from -tape or -wear.
+    const float TAPE_WEAR = %.4f;
+
+    // Deck transfer function: derived from -deck, overridable with
+    // -noise, -sharpness, -wow and -tracking.
+    const float DECK_NOISE = %.4f;
+    const float DECK_SHARPNESS = %.4f;
+    const float DECK_WOW = %.4f;
+    const float DECK_TRACKING = %.4f;
 
     // Increasing this value increases ringing artifacts.
     // Careful, higher values are expensive.
@@ -102,7 +127,7 @@ local common_glsl <const> = string.format([[
     const float WINDOW_BIAS = 0.0; // Offsets shape of window. This can make artifacts smear to one side or the other.
 
     const float VHS_CUTOFF = 0.01;
-    const float VHS_DROPOUT_STRENGTH = 0.000001;
+    const float VHS_DROPOUT_STRENGTH = 0.001;
     const int VHS_DROPOUT_BLUR_STEPS = 64;
 
     const vec2 VHS_MAXRES_Y = vec2(333.0, 480.0);
@@ -312,7 +337,7 @@ local common_glsl <const> = string.format([[
 
         return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
     }
-]], tape_seed, deck_seed, output_level)
+]], tape_seed, deck_seed, tape_wear, deck_noise, deck_sharpness, deck_wow, deck_tracking, output_level)
 
 local function lowerpass_shader(dx, dy)
     return common_glsl .. string.format([[
@@ -370,7 +395,7 @@ local function ntsc_encode_src(step)
             float rowSaltPepper = Common_randomFloat(rngStateRow) * 2.0 - 1.0;
             rowSaltPepper = sign(rowSaltPepper) * pow(abs(rowSaltPepper), 200.0) * 1.0;
             
-            encoded += (snowNoise + saltPepperNoise + sineNoise + rowNoise + rowSaltPepper) * NOISE_STRENGTH; 
+            encoded += (snowNoise + saltPepperNoise + sineNoise + rowNoise + rowSaltPepper) * NOISE_STRENGTH * DECK_NOISE;
             
             fragColor.xyz = vec3(encoded);
             fragColor.w = 1.0;
@@ -517,8 +542,8 @@ local vhs_sharpen = make_pass(common_glsl .. [[
     {
         vec2 uv = fragCoord.xy / iResolution.xy;
         vec4 color = texture(iChannel0, uv);
-        color += SHARPEN_AMOUNT * dFdx(color);
-        color += SHARPEN_AMOUNT * dFdy(color);
+        color += SHARPEN_AMOUNT * DECK_SHARPNESS * dFdx(color);
+        color += SHARPEN_AMOUNT * DECK_SHARPNESS * dFdy(color);
         fragColor = color;
     }
 ]], base_wide, base_tall, { [0] = vhs_upsample_combined })
@@ -534,7 +559,8 @@ local vhs_dropout = make_pass(common_glsl .. [[
         uint rngStateI = Common_frameRng(vec2(dropout, fragCoord.x), 1U);
         uint rngStateQ = Common_frameRng(vec2(dropout, fragCoord.y), 2U);
 
-        fragColor.x = step(1.0 - clamp(smear * VHS_DROPOUT_STRENGTH, 0.0, 1.0), dropout);
+        float density = VHS_DROPOUT_STRENGTH * TAPE_WEAR * 1.6;
+        fragColor.x = step(1.0 - clamp(smear * density, 0.0, 1.0), dropout);
         fragColor.y = 2.0 * Common_randomFloat(rngStateI) - 1.0;
         fragColor.z = 2.0 * Common_randomFloat(rngStateQ) - 1.0;
         fragColor.w = 1.0;
@@ -594,7 +620,7 @@ local vhs_headswitch = make_pass(common_glsl .. [[
             float amount = 1.0 / exp((P0 - uv.y) * 10.0 * P1 + P2);
             float kjig = 1.0 / exp((P0 - uv.y) * P1 + P2 - 0.5);
 
-            float jiggle = P3 * kjig * Common_randomFloat(rngStateRow);
+            float jiggle = P3 * kjig * DECK_WOW * Common_randomFloat(rngStateRow);
             vec2 uvmod = vec2(uv.x - amount + jiggle, uv.y);
 
             if((uvmod.x < 0.0) || (uvmod.x > 1.0))
@@ -604,7 +630,7 @@ local vhs_headswitch = make_pass(common_glsl .. [[
             fragColor.yz *= clamp(1.0 - 25.0 * kjig, 0.0, 1.0);
         }
         else {
-            float jiggle = P4 * Common_randomFloat(rngStateRow) / iResolution.x;
+            float jiggle = P4 * DECK_WOW * Common_randomFloat(rngStateRow) / iResolution.x;
             vec2 uvmod = vec2(uv.x + jiggle, uv.y);
             if((uvmod.x < 0.0) || (uvmod.x > 1.0))
                 fragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -627,7 +653,7 @@ local vhs_tracking = make_pass(common_glsl .. [[
         float pixel = 1.0 / iResolution.x;
 
         float factor = exp(-0.5 * P0 * uv.y);
-        float wave = P1 * Common_randomFloat(rngStateRow);
+        float wave = P1 * DECK_TRACKING * Common_randomFloat(rngStateRow);
         vec4 color = texture(iChannel0, uv + vec2(factor * wave * pixel, 0.0));
 
         float ymod = P2 * dot(color.yz, color.yz);
