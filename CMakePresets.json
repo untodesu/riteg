@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "common-debug",
+      "displayName": "Common (Debug)",
+      "inherits": "common",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "common-release",
+      "displayName": "Common (Release)",
+      "inherits": "common",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "common-debug",
+      "displayName": "Common (Debug)",
+      "configurePreset": "common-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "common-release",
+      "displayName": "Common (Release)",
+      "configurePreset": "common-release",
+      "configuration": "Release"
+    }
+  ]
+}

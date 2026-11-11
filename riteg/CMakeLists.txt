@@ -39,6 +39,7 @@ target_compile_features(riteg PRIVATE cxx_std_20)
 if(WIN32)
     enable_language(RC)
     target_sources(riteg PRIVATE "${CMAKE_CURRENT_LIST_DIR}/riteg.rc")
+    target_compile_definitions(riteg PRIVATE _CRT_SECURE_NO_WARNINGS) # eat my ass microsoft
 endif()
 
 install(TARGETS riteg RUNTIME DESTINATION ".")

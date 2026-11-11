@@ -1,0 +1,15 @@
+# pch.hh is included explicitly for IntelliSense and
+# force-included by CMake for the build, so clangd's
+# include cleaner always reports it as unused
+Diagnostics:
+  Includes:
+    IgnoreHeader:
+      - pch\.hh
+---
+# Commands for headers are interpolated from a neighbouring .cc and
+# clangd drops MSVC's /std:c++20 while doing so, leaving clang-cl at
+# its C++14 default. -Xclang reaches the frontend under any driver mode
+If:
+  PathMatch: .*\.hh
+CompileFlags:
+  Add: [-Xclang, -std=c++20]

@@ -16,6 +16,10 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
 ## avoid pulling redistributable installers alongside the game package
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+## Emit compile_commands.json for clangd; the Ninja and Makefile
+## generators write it, the Visual Studio one does not
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 add_subdirectory(deps)
 add_subdirectory(riteg)
 
