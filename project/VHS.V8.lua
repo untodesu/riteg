@@ -106,8 +106,25 @@ local common_glsl <const> = string.format([[
 
     const float GAMMA_CORRECTION = 0.707;
 
+    // VCR output is a little darker than the source, and every copy loses
+    // a bit more level. 0.98 per generation is about 6 percent down by the fourth pass
+    // relative to the first: noticeable, but not a fade to black.
+    const float OUTPUT_LEVEL_LOSS = 0.98;
+
     const mat3 RGB_TO_YIQ = mat3(0.299, 0.587, 0.114, 0.595, -0.274, -0.3213, 0.2115,-0.5227, 0.3112);
     const mat3 YIQ_TO_RGB = mat3(1.0, 0.956, 0.619, 1.0, -0.272, -0.647, 1.0, -1.106, 1.703);
+
+    // Empirical inverse of the flat-color transfer of one full pass
+    // (two NTSC encode/decode pairs plus the saturation stage) at
+    // SATURATION = 4. Without it the pass has a net chroma gain > 1 and
+    // feedback pumps colors until they clip. With it a flat patch comes
+    // back at almost the same color, so generations only add the intended
+    // spatial/analog artifacts instead of a hue shift.
+    // Recompute this if SATURATION or the NTSC constants change.
+    const mat3 COLOR_CORRECTION = mat3(
+         0.912426188, -0.010643677,  0.239216447,
+        -0.052850288,  1.101521626, -0.371550428,
+         0.138775636, -0.090454783,  1.119551022);
     
     uint Common_newRngStateEx(vec2 uv, uint entropy)
     {
@@ -161,7 +178,9 @@ local common_glsl <const> = string.format([[
             float sincQ = NTSC_sinc(float(i) / QLOWPASS_WAVELENGTH) / QLOWPASS_WAVELENGTH;
             
             vec2 uvWithOffset = vec2(uv.x + float(i) * pixelWidth, uv.y);
-            vec3 yiqSample = RGB_TO_YIQ * clamp(texture(sampler, uvWithOffset).rgb, vec3(0.0), vec3(1.0));
+            // GLSL mat3 is column-major, so the row-major constants above
+            // have to be applied as row vectors: v * M == M^T * v.
+            vec3 yiqSample = clamp(texture(sampler, uvWithOffset).rgb, vec3(0.0), vec3(1.0)) * RGB_TO_YIQ;
 
             yiq.x += yiqSample.x * sincY * window;
             yiq.y += yiqSample.y * sincI * window;
@@ -178,7 +197,6 @@ local common_glsl <const> = string.format([[
     float NTSC_decodeAM(sampler2D sampler, in vec2 uv, in float pixelWidth)
     {
         float phaseAM = uv.x * PI / (AM_DEMODULATE_WAVELENGTH * pixelWidth);        
-        float windowWeight = 0.0;
         float decoded = 0.0;
 
         for(int i = -DECODE_WINDOW_WIDTH; i <= DECODE_WINDOW_WIDTH; ++i) {
@@ -190,15 +208,14 @@ local common_glsl <const> = string.format([[
             float encodedSample = texture(sampler, uvWithOffset).x;
             
             decoded += encodedSample * sinc * window;
-            windowWeight += window;
         }
         
         return decoded * sin(phaseAM) * 4.0;
     }
 
-    vec3 NTSC_fullDecodeYIQ(sampler2D sampler, in vec2 uv, in float pixelWidth, ivec2 rng, bool alternatePhase)
+    vec3 NTSC_fullDecodeYIQ(sampler2D sampler, in vec2 uv, in float pixelWidth, uint rngRow, bool alternatePhase)
     {
-        uint seed = uint(rng.y);
+        uint seed = rngRow;
         vec2 originalUV = uv;
         
         vec3 rowNoiseIntensity = vec3(Common_randomFloat(seed), Common_randomFloat(seed), Common_randomFloat(seed));
@@ -234,11 +251,6 @@ local common_glsl <const> = string.format([[
         yiq.yz *= SATURATION / windowWeight;
 
         return yiq;
-    }
-    
-    vec3 NTSC_fullDecodeRGB(sampler2D sampler, in vec2 uv, in float pixelWidth, ivec2 rng, bool alternatePhase)
-    {
-        return max(vec3(0.0, 0.0, 0.0), YIQ_TO_RGB * NTSC_fullDecodeYIQ(sampler, uv, pixelWidth, rng, alternatePhase));
     }
 
     vec4 VHS_cubic(float v)
@@ -311,7 +323,7 @@ local yiq_to_rgb_src <const> = common_glsl .. [[
     {
         vec2 uv = fragCoord / iResolution.xy;
         vec3 yiq = texture(iChannel0, uv).xyz;
-        fragColor.rgb = YIQ_TO_RGB * yiq;
+        fragColor.rgb = yiq * YIQ_TO_RGB;
         fragColor.w = 1.0;
     }
 ]]
@@ -368,9 +380,8 @@ local ntsc_decode_iq_src <const> = common_glsl .. [[
         vec2 pixelSize = 1.0 / iResolution.xy;
         
         uint rngStateRow = Common_newRngState(vec2(0.0, fragCoord.y));
-        uint rngStateCol = Common_newRngState(vec2(fragCoord.x, 0.0));
 
-        fragColor.xyz = NTSC_fullDecodeYIQ(iChannel0, uv, pixelSize.x * NTSC_SCALE, ivec2(rngStateCol, rngStateRow), int(fragCoord.y) % 2 == 0);
+        fragColor.xyz = NTSC_fullDecodeYIQ(iChannel0, uv, pixelSize.x * NTSC_SCALE, rngStateRow, int(fragCoord.y) % 2 == 0);
         fragColor.w = 1.0;
     }
 ]]
@@ -622,7 +633,8 @@ local final_rgb = make_pass(common_glsl .. [[
     {
         vec2 uv = fragCoord / iResolution.xy;
         vec4 color = texture(iChannel0, uv);
-        fragColor.rgb = YIQ_TO_RGB * color.xyz;
+        vec3 rgb = max(COLOR_CORRECTION * (color.xyz * YIQ_TO_RGB), vec3(0.0));
+        fragColor.rgb = pow(rgb, vec3(GAMMA_CORRECTION)) * OUTPUT_LEVEL_LOSS;
         fragColor.a = 1.0;
     }
 ]], out_wide, out_tall, { [0] = ntsc_post_vcr_decode_iq })
