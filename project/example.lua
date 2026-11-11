@@ -1,6 +1,6 @@
 -- This shader is directly copypasted from a new shader
 -- page on Shadertoy: https://www.shadertoy.com/new
-local example = riteg.create_shader(640, 480, [[
+local example = riteg.node(riteg.program([[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         // Normalized pixel coordinates (from 0 to 1)
@@ -12,11 +12,13 @@ local example = riteg.create_shader(640, 480, [[
         // Output to screen
         fragColor = vec4(col, 1.0);
     }
-]], { iChannel0 = riteg.get_image_source() })
+]]), 640, 480)
+
+example:input(0, riteg.get_image_source())
 
 -- This shader is directly copypasted from my Shadertoy
 -- account: https://www.shadertoy.com/view/4cf3W8
-local pixelize = riteg.create_shader(640, 480, [[
+local pixelize = riteg.node(riteg.program([[
     #define BLOCK_WIDTH     8.0
     #define BLOCK_HEIGHT    8.0
     #define SIZE_RATIO_X    0.5
@@ -48,6 +50,8 @@ local pixelize = riteg.create_shader(640, 480, [[
             fragColor = BACKGROUND;
         else fragColor = color;
     }
-]], { iChannel0 = example })
+]]), 640, 480)
 
-riteg.set_display_source(pixelize)
+pixelize:input(0, example)
+
+riteg.display(pixelize)

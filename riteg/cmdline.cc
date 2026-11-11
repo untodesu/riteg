@@ -51,7 +51,7 @@ bool cmdline::contains(std::string_view option)
     assert(option.size());
 
     for(int i = 0; i < s_argc; ++i) {
-        std::string_view argument(s_argv[0]);
+        std::string_view argument(s_argv[i]);
 
         if(argument.empty() || argument[0] != '-') {
             // Not an option

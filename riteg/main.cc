@@ -5,11 +5,11 @@
 #include "riteg/loader_fsiter.hh"
 #include "riteg/loader_oneshot.hh"
 #include "riteg/loader_sprintf.hh"
+#include "riteg/program.hh"
 #include "riteg/project.hh"
 #include "riteg/saver.hh"
 #include "riteg/saver_oneshot.hh"
 #include "riteg/saver_sprintf.hh"
-#include "riteg/shader.hh"
 #include "riteg/source.hh"
 #include "riteg/timings.hh"
 
@@ -68,11 +68,22 @@ int main(int argc, char** argv)
         }
     }
 
-    Shader::init();
+    Program::init();
 
     project::init();
 
     cmdline::init_late();
+
+    if(!project::finalize()) {
+        delete loader;
+        delete saver;
+        project::deinit();
+        Program::deinit();
+        cmdline::deinit();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return EXIT_FAILURE;
+    }
 
     if(loader) {
         loader->init();
@@ -136,7 +147,7 @@ int main(int argc, char** argv)
 
     project::deinit();
 
-    Shader::deinit();
+    Program::deinit();
 
     cmdline::deinit();
 

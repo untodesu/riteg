@@ -122,8 +122,8 @@ Notes:
 - `Start-Process -ArgumentList` joins its items with spaces without adding quotes. If the
   repository or output path contains spaces, embed the quotes manually or the run fails.
 - A missing output file plus a non-empty stderr log means the run failed: report the log,
-  do not guess. Shader compile/link failures call `std::terminate` and print a critical
-  log line.
+  do not guess. Shader compile/link failures and graph errors are logged as a critical
+  message and the process exits with `EXIT_FAILURE`.
 - Killing the process after the file exists is fine. Do not add an auto-exit flag or a
   `-quit` option just to make tests easier unless the user asks for it.
 - `VHS.V8.lua` seeds its RNG from `os.time()` and derives a shader seed from Lua's RNG, so
@@ -141,8 +141,8 @@ Notes:
   (`invalid argument [ipath]` etc.). This is useful for checking CLI wiring.
 
 The `Saver` reads the output source's framebuffer. `Blank` and `Image` sources have
-framebuffer 0, so they can only be inputs; the project script must call
-`riteg.set_output_source()` on a shader source before a saver can write anything.
+framebuffer 0, so they can only be inputs; the project script must call `riteg.output()` on
+a shader node before a saver can write anything.
 
 For a targeted shader test, put a throwaway `.lua` project in a temporary directory and pass
 its path as the first argument. Do not add test-only projects to `project/`.
@@ -152,12 +152,14 @@ its path as the first argument. Do not add test-only projects to `project/`.
 ```
 riteg/
   main.cc           GLFW/GLAD init, main loop, loader/saver dispatch, window blit
-  project.hh/.cc    Lua state, riteg.* API, source registry, per-frame render pass
+  project.hh/.cc    Lua state, riteg.* API, userdata wrappers, finalize/render pass
+  graph.hh/.cc      DAG ownership, compile to a flat plan, target pool, plan dump
+  node.hh/.cc       shader pass instance (Source) and NodePrev feedback source
+  program.hh/.cc    compiled GLSL program, uniform locations, fullscreen VAO
+  render_target.hh/.cc  texture + FBO + size/format/sampler state
   source.hh         Source interface: texture, framebuffer, size, render()
   blank.hh/.cc      16x16 constant-color texture source (default black)
   image.hh/.cc      stb-loaded image source; uploads RGBA into GL_RGBA16F
-  shader.hh/.cc     GLSL pass: compiles shadertoy-style source, renders into RGBA16F FBO,
-                    exposes iResolution/iTime/iFrame/iChannel* uniforms
   shader_bits.hh    GLSL 330 header/footer, Shadertoy uniforms, fullscreen triangle strip
   loader.hh + loader_{oneshot,sprintf,fsiter}.{hh,cc}
   saver.hh  + saver_{oneshot,sprintf}.{hh,cc}, saver.cc (glReadPixels + stb write)
@@ -175,24 +177,32 @@ scripts/setup.py    editor environment setup (user-run, machine-local output)
 
 Frame flow:
 
-1. `main` creates the window and GL context, parses `-loader`/`-saver`, initializes the
-   chosen implementations, then `project::init()` creates the Lua state and API.
+1. `main` creates the window and GL context, parses `-loader`/`-saver`, then
+   `Program::init()` and `project::init()` create the GL resources and the Lua state.
 2. `cmdline::init_late()` executes the project script (first positional argument). The
-   script calls `riteg.create_shader()` and friends, which registers `Source`s in creation
-   order and may set display/output sources.
-3. Each frame: `loader->step()` updates the `Image` source, `project::render()` renders every
-   source in registration order, then the window is blitted and `saver->step()` runs.
-4. On window close: project and shader teardown, GLFW shutdown. Loader/saver objects are
-   currently not deleted; do not treat that as a leak you must fix unless asked.
+   script builds a graph with `riteg.program()` / `riteg.node()` and sets display/output
+   sources with `riteg.display()` / `riteg.output()`.
+3. `project::finalize()` compiles the graph into a flat plan, allocates render targets and
+   performs reachability pruning. `main` exits with `EXIT_FAILURE` if the script or the
+   graph is invalid.
+4. Each frame: `loader->step()` updates the `Image` source, `project::render()` renders the
+   plan in order, then the window is blitted and `saver->step()` runs.
+5. On window close: project and program teardown, GLFW shutdown. Loader/saver objects are
+   currently not deleted on the normal path; do not treat that as a leak you must fix unless
+   asked.
 
-Important ordering constraints:
+Important graph constraints:
 
-- Sources render in the order they were created. A shader that samples `iChannelN` must be
-  created **after** the source assigned to that channel, otherwise it samples the previous
-  frame's texture. The Lua examples follow this bottom-up pattern.
-- `project::get_display_source()` falls back to the output source. If an output source
-  exists, `main` always blits it to the window and the output is what the user sees; a
-  separate display source is only visible when no output source is set.
+- The graph is a DAG; creation order does not matter because `Graph::compile()` sorts it
+  topologically. Cycles are rejected unless they go through `node:prev()`.
+- Targets are pooled by exact `(width, height, format, filter, wrap)`. Do not reuse a larger
+  target for a smaller node: shaders derive texel sizes from `textureSize()` /
+  `iResolution`.
+- Display and output sources are pinned for the whole frame; the saver and window blit run
+  after rendering.
+- Nodes not reachable from display/output are not rendered.
+- `project::get_display_source()` returns the display source or the output source as a
+  fallback. `main` blits both if they exist; the output is what a saver writes.
 - `iFrame` is declared `float` in the shader header and incremented once per rendered frame.
 
 ## Code conventions
@@ -213,7 +223,7 @@ Important ordering constraints:
   `Source` contract (`get_texture`, `get_framebuffer`, dimensions, `render`).
 - When adding a source, loader, or saver: add the header and `.cc` to
   `riteg/CMakeLists.txt`, register it in `main.cc` (loaders/savers) or `project.cc` (Lua
-  API and source IDs), and update `docs/01.running.md` / `docs/02.project.md` when the
+  API and graph nodes), and update `docs/01.running.md` / `docs/02.project.md` when the
   user-visible CLI or Lua API changes.
 
 ## Known sharp edges
@@ -221,17 +231,17 @@ Important ordering constraints:
 These are current behaviors, not necessarily desired ones. Do not "fix" them incidentally;
 if a task touches them, verify the intended behavior first.
 
-- `cmdline::contains()` iterates arguments but always reads `s_argv[0]`, so
-  `riteg.has_option()` sees only the first argument. Use `cmdline::get()` or fix it
-  deliberately.
 - `Loader_Sprintf::init()` checks whether the *format* is empty when deciding whether to
   use `-imaxframes`; since an empty format is rejected above, the limit stays `SIZE_MAX`.
   `Saver_Sprintf` does the same check against the limit and behaves as documented.
 - `Image` and `Blank` return framebuffer 0; `Saver::write_source_RGBA` asserts a non-zero
-  framebuffer, so they cannot be saved directly.
-- A shader compilation/link failure terminates the whole process; there is no fallback pass.
-- `project::deinit()` deletes sources but not loader/saver instances, and there is no
-  normal early-exit path; tests rely on killing the window process.
+  framebuffer, so they cannot be saved directly. `riteg.output()` rejects them earlier.
+- Shader compile and graph errors are no longer fatal `std::terminate` paths: they are
+  reported to Lua/log and `main` returns `EXIT_FAILURE`. Loader/saver are still not deleted
+  on the normal path; the early-error path does delete them.
+- Render targets are pooled by exact `(width, height, format, filter, wrap)`. Do not relax
+  this without also giving shaders a logical size independent of `textureSize()`.
+- `node:prev()` is the only supported feedback edge. A direct self-input is a graph error.
 
 ## Commit messages
 

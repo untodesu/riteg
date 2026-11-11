@@ -28,6 +28,24 @@ local base_tall <const> = 480
 local out_wide = math.min(math.max(riteg.get_option_number("output-width", base_wide / 2), 320), 2560)
 local out_tall = math.min(math.max(riteg.get_option_number("output-height", base_tall), 240), 1920)
 
+-- The downsample pass only keeps 333 columns of luminance and 40 columns
+-- of chroma. Three extra columns keep the black margin that bicubic
+-- sampling used to see at the right edge of the old full-width target.
+local downsample_wide <const> = 336
+
+-- Create a shader node from a source. `channels` maps channel indices to sources.
+local function make_pass(source, width, height, channels, options)
+    local node = riteg.node(riteg.program(source), width, height, options)
+
+    if channels then
+        for channel, input in pairs(channels) do
+            node:input(channel, input)
+        end
+    end
+
+    return node
+end
+
 -- Ensure we set up the random generator with a unique
 -- seed every time so the generational loss does not just
 -- overlay; I had an idea to use the seed in shaders but didn't
@@ -357,7 +375,7 @@ local ntsc_decode_iq_src <const> = common_glsl .. [[
     }
 ]]
 
-local gamma_correct = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local gamma_correct = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord / iResolution.xy;
@@ -365,22 +383,22 @@ local gamma_correct = riteg.create_shader(base_wide, base_tall, common_glsl .. [
         fragColor.rgb = pow(color.rgb, vec3(1.0 / GAMMA_CORRECTION));
         fragColor.a = color.a;
     }
-]], { iChannel0 = riteg.get_image_source() })
+]], base_wide, base_tall, { [0] = riteg.get_image_source() })
 
-local ntsc_pre_vcr_encode = riteg.create_shader(2.0 * base_wide, base_tall, ntsc_encode_src(0), { iChannel0 = gamma_correct })
-local ntsc_pre_vcr_decode_y = riteg.create_shader(2.0 * base_wide, base_tall, ntsc_decode_y_src, { iChannel0 = ntsc_pre_vcr_encode })
-local ntsc_pre_vcr_decode_iq = riteg.create_shader(2.0 * base_wide, base_tall, ntsc_decode_iq_src, { iChannel0 = ntsc_pre_vcr_decode_y })
+local ntsc_pre_vcr_encode = make_pass(ntsc_encode_src(0), 2.0 * base_wide, base_tall, { [0] = gamma_correct }, { format = "r16f" })
+local ntsc_pre_vcr_decode_y = make_pass(ntsc_decode_y_src, 2.0 * base_wide, base_tall, { [0] = ntsc_pre_vcr_encode }, { format = "r16f" })
+local ntsc_pre_vcr_decode_iq = make_pass(ntsc_decode_iq_src, 2.0 * base_wide, base_tall, { [0] = ntsc_pre_vcr_decode_y })
 
-local vhs_cutoff = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_cutoff = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord.xy / iResolution.xy;
         vec4 color = texture(iChannel0, uv);
         fragColor = color * step(VHS_CUTOFF, 1.0 - uv.x);
     }
-]], { iChannel0 = ntsc_pre_vcr_decode_iq })
+]], base_wide, base_tall, { [0] = ntsc_pre_vcr_decode_iq })
 
-local vhs_downsample = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_downsample = make_pass(common_glsl .. [[
     vec3 downsampleVideo(vec2 uv, vec2 pixelSize, ivec2 samples)
     {
         vec2 uvStart = uv - pixelSize / 2.0;
@@ -425,29 +443,33 @@ local vhs_downsample = riteg.create_shader(base_wide, base_tall, common_glsl .. 
         
         fragColor = vec4(luminance, chroma, 1.0);
     }
-]], { iChannel0 = vhs_cutoff })
+]], downsample_wide, base_tall, { [0] = vhs_cutoff })
 
-local vhs_upsample = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_upsample = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord / iResolution.xy;
         
-        vec2 resLuminance = min(VHS_MAXRES_Y, vec2(iResolution));
-        vec2 resChroma = min(VHS_MAXRES_IQ, vec2(iResolution));
+        // The downsample target packs luminance and chroma at different
+        // effective widths, so the data scale comes from the channel size.
+        vec2 channelSize = vec2(textureSize(iChannel0, 0));
+
+        vec2 resLuminance = min(VHS_MAXRES_Y, channelSize);
+        vec2 resChroma = min(VHS_MAXRES_IQ, channelSize);
         
-        vec2 uvLuminance = uv * (resLuminance / vec2(iResolution));
-        vec2 uvChroma = uv * (resChroma / vec2(iResolution));
+        vec2 uvLuminance = uv * (resLuminance / channelSize);
+        vec2 uvChroma = uv * (resChroma / channelSize);
         
         float luminance = VHS_textureBicubic(iChannel0, uvLuminance).x;
         vec2 chroma = VHS_textureBicubic(iChannel0, uvChroma).yz;
         
         fragColor = vec4(luminance, chroma, 1.0);
     }
-]], { iChannel0 = vhs_downsample })
+]], base_wide, base_tall, { [0] = vhs_downsample })
 
-local vhs_lowerpass = riteg.create_shader(base_wide, base_tall, lowerpass_shader(1.0, 0.0), { iChannel0 = vhs_upsample })
+local vhs_lowerpass = make_pass(lowerpass_shader(1.0, 0.0), base_wide, base_tall, { [0] = vhs_upsample })
 
-local vhs_upsample_combined = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_upsample_combined = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord / iResolution.xy;
@@ -457,9 +479,9 @@ local vhs_upsample_combined = riteg.create_shader(base_wide, base_tall, common_g
         fragColor.xyz = 3.0 * vhs_upsample.xyz - 2.0 * vhs_lowerpass.xyz;
         fragColor.w = 1.0;
     }
-]], { iChannel0 = vhs_upsample, iChannel1 = vhs_lowerpass })
+]], base_wide, base_tall, { [0] = vhs_upsample, [1] = vhs_lowerpass })
 
-local vhs_sharpen = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_sharpen = make_pass(common_glsl .. [[
     #define SHARPEN_AMOUNT 1.0
 
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
@@ -470,9 +492,9 @@ local vhs_sharpen = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
         color += SHARPEN_AMOUNT * dFdy(color);
         fragColor = color;
     }
-]], { iChannel0 = vhs_upsample_combined })
+]], base_wide, base_tall, { [0] = vhs_upsample_combined })
 
-local vhs_dropout = riteg.create_shader(base_wide / 2, base_tall, common_glsl .. [[
+local vhs_dropout = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         uint rngState = Common_newRngState(fragCoord);
@@ -488,9 +510,9 @@ local vhs_dropout = riteg.create_shader(base_wide / 2, base_tall, common_glsl ..
         fragColor.z = 2.0 * Common_randomFloat(rngStateQ) - 1.0;
         fragColor.w = 1.0;
     }
-]])
+]], base_wide / 2, base_tall)
 
-local vhs_dropout_blur = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_dropout_blur = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         uint rngState = Common_newRngState(fragCoord);
@@ -511,9 +533,9 @@ local vhs_dropout_blur = riteg.create_shader(base_wide, base_tall, common_glsl .
         fragColor.x = clamp(fragColor.x, 0.0, 1.0);
         fragColor.yz = clamp(fragColor.yz, -1.0, 1.0);
     }
-]], { iChannel0 = vhs_dropout })
+]], base_wide, base_tall, { [0] = vhs_dropout })
 
-local vhs_dropout_combined = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_dropout_combined = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord.xy / iResolution.xy;
@@ -525,9 +547,9 @@ local vhs_dropout_combined = riteg.create_shader(base_wide, base_tall, common_gl
         fragColor.z = mix(color.z, 0.125 * dropout.z * dropout.x, dropout.x);
         fragColor.w = 1.0;
     }
-]], { iChannel0 = vhs_sharpen, iChannel1 = vhs_dropout_blur })
+]], base_wide, base_tall, { [0] = vhs_sharpen, [1] = vhs_dropout_blur })
 
-local vhs_headswitch = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_headswitch = make_pass(common_glsl .. [[
     #define P0 0.003125
     #define P1 30.00000
     #define P2 3.000000
@@ -560,9 +582,9 @@ local vhs_headswitch = riteg.create_shader(base_wide, base_tall, common_glsl .. 
             else fragColor = texture(iChannel0, uvmod);
         }
     }
-]], { iChannel0 = vhs_dropout_combined })
+]], base_wide, base_tall, { [0] = vhs_dropout_combined })
 
-local vhs_tracking = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
+local vhs_tracking = make_pass(common_glsl .. [[
     #define P0 50.0
     #define P1 1.0
     #define P2 0.5
@@ -588,14 +610,14 @@ local vhs_tracking = riteg.create_shader(base_wide, base_tall, common_glsl .. [[
         fragColor.z = mix(color.z, qmod, factor);
         fragColor.w = color.w;
     }
-]], { iChannel0 = vhs_headswitch })
+]], base_wide, base_tall, { [0] = vhs_headswitch })
 
-local post_vcr_rgb = riteg.create_shader(base_wide, base_tall, yiq_to_rgb_src, { iChannel0 = vhs_tracking })
-local ntsc_post_vcr_encode = riteg.create_shader(2.0 * base_wide, base_tall, ntsc_encode_src(1), { iChannel0 = post_vcr_rgb })
-local ntsc_post_vcr_decode_y = riteg.create_shader(2.0 * base_wide, base_tall, ntsc_decode_y_src, { iChannel0 = ntsc_post_vcr_encode })
-local ntsc_post_vcr_decode_iq = riteg.create_shader(2.0 * base_wide, base_tall, ntsc_decode_iq_src, { iChannel0 = ntsc_post_vcr_decode_y })
+local post_vcr_rgb = make_pass(yiq_to_rgb_src, base_wide, base_tall, { [0] = vhs_tracking })
+local ntsc_post_vcr_encode = make_pass(ntsc_encode_src(1), 2.0 * base_wide, base_tall, { [0] = post_vcr_rgb }, { format = "r16f" })
+local ntsc_post_vcr_decode_y = make_pass(ntsc_decode_y_src, 2.0 * base_wide, base_tall, { [0] = ntsc_post_vcr_encode }, { format = "r16f" })
+local ntsc_post_vcr_decode_iq = make_pass(ntsc_decode_iq_src, 2.0 * base_wide, base_tall, { [0] = ntsc_post_vcr_decode_y })
 
-local final_rgb = riteg.create_shader(out_wide, out_tall, common_glsl .. [[
+local final_rgb = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord / iResolution.xy;
@@ -603,6 +625,6 @@ local final_rgb = riteg.create_shader(out_wide, out_tall, common_glsl .. [[
         fragColor.rgb = YIQ_TO_RGB * color.xyz;
         fragColor.a = 1.0;
     }
-]], { iChannel0 = ntsc_post_vcr_decode_iq })
+]], out_wide, out_tall, { [0] = ntsc_post_vcr_decode_iq })
 
-riteg.set_output_source(final_rgb)
+riteg.output(final_rgb)

@@ -1,12 +1,14 @@
 #pragma once
 
 struct Timings;
+class Node;
+class NodePrev;
 
 /**
- * Each rendering pass may require a bunch of inputs; each input
- * can be either a loaded texture, a pre-generated texture or an
- * another rendering pass's output; consequently, this is a base class
- * for anything that can and does produce a texture
+ * Each rendering pass may require a bunch of inputs; each input can be
+ * either a loaded texture, a pre-generated texture or another rendering
+ * pass's output; consequently, this is a base class for anything that
+ * can and does produce a texture
  */
 class Source {
 public:
@@ -16,4 +18,13 @@ public:
     virtual int get_texture_width(void) const = 0;
     virtual int get_texture_height(void) const = 0;
     virtual void render(const Timings& timings) = 0;
+
+    virtual Node* as_node(void)
+    {
+        return nullptr;
+    }
+    virtual NodePrev* as_prev(void)
+    {
+        return nullptr;
+    }
 };
