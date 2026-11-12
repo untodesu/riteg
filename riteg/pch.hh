@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <compare>
 #include <filesystem>
 #include <format>
@@ -24,6 +25,8 @@
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>

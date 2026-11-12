@@ -36,6 +36,23 @@ int main(int argc, char** argv)
 
     cmdline::init(argc, argv);
 
+    double target_fps = 0.0;
+    if(auto value = cmdline::get("fps"); value.size()) {
+        auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), target_fps);
+
+        if(error != std::errc() || end != value.data() + value.size() || target_fps < 0.0) {
+            LOG_CRITICAL("invalid -fps value: {}", value);
+            cmdline::deinit();
+            glfwDestroyWindow(window);
+            glfwTerminate();
+            return EXIT_FAILURE;
+        }
+    }
+
+    if(target_fps > 0.0) {
+        LOG_INFO("target fps: {:.3f}", target_fps);
+    }
+
     auto loader_type = cmdline::get("loader");
     auto saver_type = cmdline::get("saver");
 
@@ -98,7 +115,29 @@ int main(int argc, char** argv)
     timings.delta_time = 0.0f;
     timings.frame_count = 0;
 
+    // Pace the whole loop, not just the render: a project authored per frame
+    // (VHS.V9) should advance at its target rate, not at the display refresh
+    // rate. 0 leaves pacing to VSync.
+    const double frame_interval = target_fps > 0.0 ? 1.0 / target_fps : 0.0;
+    double next_frame_time = glfwGetTime();
+
     while(!glfwWindowShouldClose(window)) {
+        if(frame_interval > 0.0) {
+            auto now = glfwGetTime();
+
+            if(now < next_frame_time) {
+                std::this_thread::sleep_for(std::chrono::duration<double>(next_frame_time - now));
+                now = glfwGetTime();
+            }
+
+            next_frame_time += frame_interval;
+
+            // Do not catch up after a slow frame: a burst of frames would
+            // bring the shake right back.
+            if(next_frame_time < now)
+                next_frame_time = now;
+        }
+
         auto current_time = glfwGetTime();
 
         timings.delta_time = current_time - timings.current_time;

@@ -26,6 +26,10 @@
 -- effect. TAPE_ROWS is 480 and TAPE_ROWS_PER_FIELD is 240 by design; do not
 -- replace them with iResolution-derived values.
 --
+-- The per-frame animation is authored at 30 fps (one VHS field per track).
+-- On a high-refresh display, run the host with -fps 30, otherwise roll, tear
+-- and tape noise advance faster than intended.
+--
 -- Presets are selected per pipeline stage and can be mixed freely. A preset
 -- supplies defaults for its stage only; every individual -tape-* / -deck-*
 -- option still wins over it, and a stage without a preset keeps its
