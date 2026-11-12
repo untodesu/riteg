@@ -866,15 +866,14 @@ local common_glsl <const> = defines .. [[
         return clamp(1.0 - 0.35 * wear - TAPE_RF_LOSS * smoothstep(0.55, 0.85, patch), 0.0, 1.0);
     }
 
-    // 1 while the servo has no lock. Two independent things can unlock it: a
-    // weak carrier (no sync pulses to lock to) and the deck's own servo, which
-    // can slip even with a perfect tape.
+    // 1 while the servo has no lock. A deck with a good frame lock hides most
+    // of this, which is why the same tape rolls on one deck and not another.
+    // The lock is lost and regained with the RF patch, so the picture snaps
+    // back when the patch passes instead of drifting forever.
     float Tape_unlocked(float rf)
     {
-        float rfTerm = (1.0 - smoothstep(TAPE_LOCK_LO, TAPE_LOCK_HI, rf)) * (1.0 - 0.65 * DECK_FRAMELOCK);
-        float deckTerm = 1.0 - smoothstep(0.80, 0.99, DECK_FRAMELOCK);
-
-        return clamp(max(rfTerm, deckTerm), 0.0, 1.0) * TAPE_SYNC_LOSS;
+        float raw = 1.0 - smoothstep(TAPE_LOCK_LO, TAPE_LOCK_HI, rf);
+        return clamp(raw * (1.0 - 0.65 * DECK_FRAMELOCK), 0.0, 1.0) * TAPE_SYNC_LOSS;
     }
 
     // 0 = the line pulse is still found, 1 = the line oscillator is free-run.
