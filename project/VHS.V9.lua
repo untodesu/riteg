@@ -86,6 +86,8 @@ local tape_wobble = option("wobble", 0.02, 0.0, 0.1)
 local tape_breath = option("breath", 0.06, 0.0, 0.1)
 local tape_headswitch = option("headswitch", 0.02, 0.0, 0.1)
 local tape_chroma_phase = option("chroma-phase", 0.0625, 0.0, 1.0)
+local tape_frame_bounce = option("frame-bounce", 0.05, 0.0, 0.2)
+local tape_frame_step = option("frame-step", 2.0, 0.5, 12.0)
 local tape_doc = option("doc", 1.0, 0.0, 1.0)
 local tape_sparkle = option("sparkle", 0.8, 0.0, 1.0)
 local tape_scratch = option("scratch", 0.0, 0.0, 1.0)
@@ -101,8 +103,8 @@ local tape_track_correlation <const> = 4.0
 local tape_slant <const> = 2.0 / base_tall
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%d deck=%d wear=%.3f dropout=%.4f grain=%.4f tracking=%.4f slant=%.5f wobble=%.5f breath=%.4f headswitch=%.4f chroma=%.4f doc=%.3f sparkle=%.3f scratch=%.3f",
-    tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_chroma_phase, tape_doc, tape_sparkle, tape_scratch))
+    "VHS hop: tape=%d deck=%d wear=%.3f dropout=%.4f grain=%.4f tracking=%.4f slant=%.5f wobble=%.5f breath=%.4f headswitch=%.4f chroma=%.4f bounce=%.4f step=%.1f doc=%.3f sparkle=%.3f scratch=%.3f",
+    tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_chroma_phase, tape_frame_bounce, tape_frame_step, tape_doc, tape_sparkle, tape_scratch))
 
 -- A bunch of GLSL code that is shared between all the
 -- passes in the filter pipeline; this contains bits from
@@ -136,6 +138,14 @@ local common_glsl <const> = string.format([[
 
     // How much wear adds chroma phase/frequency error, in radians.
     const float TAPE_CHROMA_PHASE = %.4f;
+
+    // Whole-frame sync drift: a tape/deck that loses frame lock lets the
+    // picture float vertically. Fraction of frame height.
+    const float TAPE_FRAME_BOUNCE = %.4f;
+
+    // Frame lock slips in whole lines, so the offset snaps in steps of this
+    // many lines instead of gliding.
+    const float TAPE_FRAME_STEP = %.1f;
 
     // How much of a dropout the compensator replaces with the previous line
     // before the independent white sparkle is added on top.
@@ -303,6 +313,17 @@ local common_glsl <const> = string.format([[
     {
         float n = Tape_noise(vec2(float(iFrame) / 72.0, 0.5), 60U);
         return 2.0 * n - 1.0;
+    }
+
+    // Whole-frame vertical sync offset, in frame fractions. Constant per
+    // frame; frame lock slips in whole lines, so it snaps in steps.
+    float Tape_frameOffset()
+    {
+        float amount = smoothstep(0.40, 1.0, TAPE_WEAR);
+        float slow = 2.0 * Tape_noise(vec2(float(iFrame) / 72.0, 0.5), 70U) - 1.0;
+        float fast = 2.0 * Tape_noise(vec2(float(iFrame) / 12.0, 0.5), 71U) - 1.0;
+        float bounce = (0.6 * slow + 0.4 * fast) * TAPE_FRAME_BOUNCE * amount;
+        return floor(bounce * TAPE_ROWS / TAPE_FRAME_STEP + 0.5) * TAPE_FRAME_STEP / TAPE_ROWS;
     }
 
     // Wear as a function of the frame. The octaves are 64, 16 and 4 rows
@@ -506,7 +527,7 @@ local common_glsl <const> = string.format([[
 
         return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
     }
-]], tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_chroma_phase, tape_doc, tape_sparkle, tape_scratch, tape_track_correlation)
+]], tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_chroma_phase, tape_frame_bounce, tape_frame_step, tape_doc, tape_sparkle, tape_scratch, tape_track_correlation)
 
 local function lowerpass_shader(dx, dy)
     return common_glsl .. string.format([[
@@ -629,7 +650,11 @@ local gamma_correct = make_pass(common_glsl .. [[
     {
         vec2 uv = fragCoord / iResolution.xy;
         vec2 tape = texture(iChannel1, uv).xy;
-        vec4 color = texture(iChannel0, vec2(uv.x + tape.y, uv.y));
+        // Whole-frame sync drift: the picture slides and wraps. The wrapped
+        // rows are marked as dead reads in the dropout pass, so they do not
+        // need their own noise here.
+        float bounce = Tape_frameOffset();
+        vec4 color = texture(iChannel0, vec2(uv.x + tape.y, fract(uv.y + bounce)));
         fragColor.rgb = pow(color.rgb, vec3(1.0 / GAMMA_CORRECTION));
         fragColor.a = color.a;
     }
@@ -767,6 +792,13 @@ local vhs_dropout = make_pass(common_glsl .. [[
         density = max(density, baseDropout);
         density = max(density, Tape_scratch(uv));
 
+        // Rows where the frame offset wrapped show the next/previous track's
+        // stub, read from the side. There is mostly gap between tracks there,
+        // so treat the whole band as one dead read and let the dropout path
+        // supply its snow, DOC and chroma.
+        float frameY = uv.y + Tape_frameOffset();
+        density = max(density, step(1.0, frameY) + step(frameY, 0.0));
+
         fragColor.x = step(1.0 - clamp(density, 0.0, 1.0), Common_randomFloat(rngState));
 
         uint rngI = Common_newRngState(cell + vec2(17.0, 0.0));
@@ -857,8 +889,17 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float scratch = Tape_scratch(uv);
         float streak = mask * (1.0 - scratch);
 
-        result.x = mix(result.x, snow, streak * TAPE_SPARKLE * 10.0);
-        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak);
+        // The wrapped band is a dead read, but its noise should follow the
+        // signal level: on black it stays dark instead of flashing white,
+        // on real content it still reads as snow.
+        float frameY = uv.y + Tape_frameOffset();
+        float band = step(1.0, frameY) + step(frameY, 0.0);
+        float level = clamp(result.x, 0.0, 1.0);
+        float bandDead = mix(1.0, 0.10 + 0.90 * level, band);
+
+        float dead = clamp(streak * TAPE_SPARKLE * 10.0, 0.0, 1.0) * bandDead;
+        result.x = mix(result.x, snow, dead);
+        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak * (1.0 - 0.90 * band));
 
         // A scratch takes the whole row down, so it is snow at full strength.
         result.x = mix(result.x, snow, scratch);
