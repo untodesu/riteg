@@ -19,45 +19,90 @@
 --
 -- The deck is a second, independent thing: head-switch width, wow/flutter,
 -- tracking error, frame lock, TBC and the noise floor belong to it, not to
--- tape wear. -tape and -deck pick two sides of the pair, and their defaults
--- are derived from the same seed so a run is reproducible.
+-- tape wear. -tape-seed and -deck-seed pick two sides of the pair, and their
+-- defaults are derived from the same seed so a run is reproducible.
 --
 -- V9 deliberately models a 480-line VHS/S-VHS signal, not a resolution-agnostic
 -- effect. TAPE_ROWS is 480 and TAPE_ROWS_PER_FIELD is 240 by design; do not
 -- replace them with iResolution-derived values.
 --
--- Presets set the whole parameter set at once; individual options still win:
---   -vhs-new      new tape, healthy deck (the default)
---   -vhs-used     light wear, still well tracked
---   -vhs-old      visible wear bands, occasional dropouts, older deck
---   -vhs-veryold  heavy wear, creases, scratches, weak servo, two dubs
---   -vhs-dub      clean-ish tape, three record/playback generations
---   -vhs-baddeck  new tape on a deck with bad tracking/TBC/frame lock
---   -vhs-damaged  physically damaged tape: crease, scratch, dropouts, mistracking
---   -vhs-wrecked  tape that takes the signal away: killer, vertical roll, snow
+-- Presets are selected per pipeline stage and can be mixed freely. A preset
+-- supplies defaults for its stage only; every individual -tape-* / -deck-*
+-- option still wins over it, and a stage without a preset keeps its
+-- seed-derived defaults.
+--   -tape new|used|old|veryold|damaged|wrecked   tape condition
+--   -deck good|worn|old|bad|dead                 deck condition
+--   -signal-speed sp|lp|ep                       tape speed / bandwidth
+--   -signal-decode notch|comb1|comb2|2d|2d-adaptive   (default: notch)
+--   -signal-generations N                        record/playback passes
+-- Examples:
+--   -tape old -deck good        worn tape, healthy deck
+--   -tape new -deck bad         new tape, misaligned deck
+--   -tape wrecked -deck dead    tape and deck both give up
 --
--- Signal path options:
---   -speed sp|lp|ep       luma/chroma cutoff and playback bandwidth
---   -decode notch|comb1|comb2|2d|2d-adaptive   (default: 2d; notch = old look)
---   -headswitch N         head-switch height in lines (was a fraction)
---   -headswitch-offset N  lines of the switch hidden below the frame
---   -headswitch-shift X   horizontal shift as a fraction of width
---   -tracking-height N    bottom tracking band height in lines
---   -tracking-scroll X    strength of the old scrolling tracking band
---   -chroma-delay-h N     chroma offset in base pixels
---   -chroma-delay-v N     chroma offset in field lines
---   -chroma-blend X       vertical chroma blend with the previous field line
---   -chroma-loss X        chance that a field line loses chroma entirely
---   -rf-loss X            depth of a bad patch on the tape (0..1)
---   -killer X             how hard the color killer mutes chroma (0..1)
---   -sync-loss X          how readily the servo loses lock and rolls (0..1)
---   -roll-speed X         frame offsets per frame while unlocked (default 1/90)
---   -roll-skew X          horizontal shear per roll, fraction of width
---   -dead-density X       how dense the raster is with no RF at all (0..1)
---   -snow-level X         peak brightness of dropout/tracking snow (0..1)
---   -grain-frequency X    FBM grain frequency in cycles per base pixel
---   -grain-detail N       FBM grain octaves (1..5)
--- Example: -vhs-old -wear 0.4 -tracking 0.02 -decode comb2
+-- Tape options (the medium):
+--   -tape-seed N              tape id; default: -seed
+--   -tape-wear X              oxide wear (0..2)
+--   -tape-dropout X           dropout density
+--   -tape-grain X             tape grain level
+--   -tape-scratch X           longitudinal scratch depth
+--   -tape-crease X            diagonal crease depth
+--   -tape-chroma-phase X      per-line chroma phase error
+--   -tape-wobble X            tape scrape / lateral wobble
+--   -tape-band N              wear patch height in field lines
+--   -tape-life N              wear patch length in tracks
+--   -tape-position N          start position on the tape, in tracks
+--   -tape-length N            tape length in tracks
+--   -tape-breath X            head-to-tape contact breathing
+--   -tape-rf-loss X           depth of a bad patch that drops RF (0..1)
+--
+-- Deck options (the VTR):
+--   -deck-seed N                   deck id; default: derived from -seed
+--   -deck-headswitch N             head-switch height in lines
+--   -deck-headswitch-offset N      lines of the switch hidden below the frame
+--   -deck-headswitch-shift X       horizontal shift as a fraction of width
+--   -deck-headswitch-power X       vertical falloff of the shift
+--   -deck-headswitch-jitter X      per-line horizontal jitter in the switch
+--   -deck-headswitch-midline 0|1   draw the mid-line artifact
+--   -deck-headswitch-midline-pos X     where the unshifted copy starts
+--   -deck-headswitch-midline-jitter X  jitter of that start
+--   -deck-wow X                    low-frequency time-base error
+--   -deck-flutter X                high-frequency time-base error
+--   -deck-framelock X              how well vertical sync is held
+--   -deck-tbc X                    time-base corrector strength
+--   -deck-noise X                  deck noise floor
+--   -deck-tracking X               tracking error amount
+--   -deck-tracking-height N        bottom tracking band height in lines
+--   -deck-tracking-scroll X        strength of the scrolling tracking band
+--   -deck-tracking-wave N          horizontal wave inside the band, pixels
+--   -deck-tracking-snow X          transient snow level in the band
+--   -deck-tracking-noise X         fine noise level in the band
+--   -deck-tracking-anisotropy X    snow run length vs per-pixel
+--   -deck-frame-bounce X           unlocked vertical bounce
+--   -deck-frame-step N             vertical snap, in lines
+--   -deck-flag X                   top-of-frame tearing from a weak servo
+--   -deck-doc X                    dropout compensator strength
+--   -deck-sparkle X                chroma noise in dropouts
+--   -deck-killer X                 how hard the colour killer mutes chroma
+--   -deck-sync-loss X              how readily the servo loses lock
+--   -deck-roll-speed X             frame offsets per frame while unlocked
+--   -deck-roll-skew X              horizontal shear per roll
+--   -deck-dead-density X           raster density with no RF
+--   -deck-snow-level X             peak brightness of dropout/tracking snow
+--
+-- Chroma options (no preset):
+--   -chroma-delay-h N   chroma offset in base pixels (default: by speed)
+--   -chroma-delay-v N   chroma offset in field lines
+--   -chroma-blend X     vertical chroma blend with the previous field line
+--   -chroma-loss X      chance that a field line loses chroma entirely
+--
+-- Renderer options:
+--   -grain-frequency X  FBM grain frequency in cycles per base pixel
+--   -grain-detail N     FBM grain octaves (1..5)
+--   -output-width N     output width (320..2560)
+--   -output-height N    output height (240..1920)
+--   -seed N             base seed for tape and deck
+-- Example: -tape old -deck good -tape-wear 0.4 -deck-tracking 0.02 -signal-decode comb2
 
 -- ATTRIBUTION ATTRIBUTION ATTRIBUTION ATTRIBUTION
 -- ATTRIBUTION ATTRIBUTION ATTRIBUTION ATTRIBUTION
@@ -130,155 +175,135 @@ local tape_speeds = {
     ep = { luma = 1.4e6, chroma = 0.28e6, delay = 6 },
 }
 
--- Named presets. A preset only supplies defaults: every individual option
--- still wins over it, so `-vhs-old -wear 0.4` is valid. Pass exactly one
--- preset; if several are present, the most severe one in `preset_order` wins.
--- The default (no preset) is the same idea as -vhs-new, with a little
--- seed-to-seed variation in the exact wear and deck numbers.
-local presets = {
-    ["vhs-new"] = {
-        wear = 0.06, dropout = 0.001, grain = 0.020, scratch = 0.0, crease = 0.0,
-        doc = 1.0, sparkle = 0.8, chroma_phase = 0.025, wobble = 0.006,
-        band = 48.0, life = 96.0, position = 0.0,
-        speed = "sp", decode = "2d",
-        headswitch = 3.0, headswitch_offset = 1.0, headswitch_shift = 0.04,
-        wow = 0.0002, flutter = 0.0001,
-        framelock = 0.995, tbc = 0.96, noise = 0.65, tracking = 0.0,
-        tracking_height = 12.0, tracking_scroll = 0.0,
-        chroma_blend = 0.0, chroma_loss = 0.0, chroma_delay = 0.0, chroma_delay_v = 0.0,
-        frame_bounce = 0.004, frame_step = 2.0, breath = 0.025,
-        flag = 0.0, generations = 1,
+-- Stage presets. Each stage is selected independently, so a worn tape can be
+-- played on a good deck and a new tape on a misaligned one. A preset only
+-- supplies defaults for its own stage: every -tape-* / -deck-* option still
+-- wins over it, and a stage without a preset keeps its seed-derived defaults.
+local tape_presets = {
+    ["new"] = {
+        wear = 0.02, dropout = 0.0005, grain = 0.010, scratch = 0.0, crease = 0.0,
+        chroma_phase = 0.01, wobble = 0.002,
+        band = 64.0, life = 128.0, breath = 0.01,
+        rf_loss = 0.0,
     },
-    ["vhs-used"] = {
-        wear = 0.35, dropout = 0.005, grain = 0.035, scratch = 0.1, crease = 0.05,
-        doc = 1.0, sparkle = 0.8, chroma_phase = 0.04, wobble = 0.010,
-        band = 40.0, life = 80.0, position = 0.0,
-        speed = "sp", decode = "2d",
-        headswitch = 4.0, headswitch_offset = 1.0, headswitch_shift = 0.05,
-        wow = 0.0004, flutter = 0.0002,
-        framelock = 0.98, tbc = 0.90, noise = 0.8, tracking = 0.02,
-        tracking_height = 16.0, tracking_scroll = 0.0,
-        chroma_blend = 0.1, chroma_loss = 0.000025, chroma_delay = 0.0, chroma_delay_v = 0.0,
-        frame_bounce = 0.006, frame_step = 2.0, breath = 0.04,
-        flag = 0.0, generations = 1,
+    ["used"] = {
+        wear = 0.30, dropout = 0.004, grain = 0.030, scratch = 0.05, crease = 0.0,
+        chroma_phase = 0.03, wobble = 0.008,
+        band = 48.0, life = 96.0, breath = 0.03,
+        rf_loss = 0.0,
     },
-    ["vhs-old"] = {
-        wear = 0.70, dropout = 0.012, grain = 0.050, scratch = 0.3, crease = 0.2,
-        doc = 0.9, sparkle = 0.85, chroma_phase = 0.06, wobble = 0.015,
-        band = 32.0, life = 64.0, position = 0.0,
-        speed = "lp", decode = "comb2",
-        headswitch = 6.0, headswitch_offset = 1.0, headswitch_shift = 0.08,
-        wow = 0.0008, flutter = 0.0004,
-        framelock = 0.95, tbc = 0.80, noise = 1.0, tracking = 0.10,
-        tracking_height = 24.0, tracking_scroll = 0.2,
-        chroma_blend = 0.2, chroma_loss = 0.0001, chroma_delay = 5.0, chroma_delay_v = 0.0,
-        frame_bounce = 0.008, frame_step = 2.0, breath = 0.06,
-        flag = 0.05, generations = 1,
+    ["old"] = {
+        wear = 0.65, dropout = 0.012, grain = 0.050, scratch = 0.25, crease = 0.15,
+        chroma_phase = 0.06, wobble = 0.015,
+        band = 32.0, life = 64.0, breath = 0.05,
+        rf_loss = 0.0,
     },
-    ["vhs-veryold"] = {
-        wear = 1.20, dropout = 0.025, grain = 0.070, scratch = 0.6, crease = 0.5,
-        doc = 0.8, sparkle = 0.9, chroma_phase = 0.10, wobble = 0.025,
-        band = 24.0, life = 48.0, position = 0.0,
-        speed = "ep", decode = "notch",
-        headswitch = 9.0, headswitch_offset = 1.0, headswitch_shift = 0.12,
-        wow = 0.0015, flutter = 0.0008,
-        framelock = 0.85, tbc = 0.65, noise = 1.3, tracking = 0.3,
-        tracking_height = 32.0, tracking_scroll = 0.3,
-        chroma_blend = 0.3, chroma_loss = 0.0003, chroma_delay = 6.0, chroma_delay_v = 1.0,
-        frame_bounce = 0.012, frame_step = 2.0, breath = 0.08,
-        flag = 0.3, generations = 2,
+    ["veryold"] = {
+        wear = 1.00, dropout = 0.025, grain = 0.070, scratch = 0.50, crease = 0.40,
+        chroma_phase = 0.10, wobble = 0.025,
+        band = 24.0, life = 48.0, breath = 0.08,
+        rf_loss = 0.10,
     },
-    ["vhs-dub"] = {
-        wear = 0.15, dropout = 0.0025, grain = 0.030, scratch = 0.05, crease = 0.05,
-        doc = 1.0, sparkle = 0.8, chroma_phase = 0.04, wobble = 0.008,
-        band = 40.0, life = 80.0, position = 0.0,
-        speed = "lp", decode = "2d",
-        headswitch = 4.0, headswitch_offset = 1.0, headswitch_shift = 0.06,
-        wow = 0.0004, flutter = 0.0002,
-        framelock = 0.97, tbc = 0.90, noise = 0.8, tracking = 0.0,
-        tracking_height = 16.0, tracking_scroll = 0.0,
-        chroma_blend = 0.2, chroma_loss = 0.00005, chroma_delay = 5.0, chroma_delay_v = 0.0,
-        frame_bounce = 0.006, frame_step = 2.0, breath = 0.04,
-        flag = 0.0, generations = 3,
+    ["damaged"] = {
+        wear = 1.10, dropout = 0.030, grain = 0.065, scratch = 0.90, crease = 0.90,
+        chroma_phase = 0.12, wobble = 0.040,
+        band = 28.0, life = 64.0, breath = 0.08,
+        rf_loss = 0.20,
     },
-    ["vhs-baddeck"] = {
-        wear = 0.06, dropout = 0.001, grain = 0.020, scratch = 0.0, crease = 0.0,
-        doc = 1.0, sparkle = 0.8, chroma_phase = 0.025, wobble = 0.006,
-        band = 48.0, life = 96.0, position = 0.0,
-        speed = "sp", decode = "notch",
-        headswitch = 10.0, headswitch_offset = 2.0, headswitch_shift = 0.15,
-        wow = 0.0015, flutter = 0.0008,
-        framelock = 0.50, tbc = 0.20, noise = 1.0, tracking = 0.6,
-        tracking_height = 48.0, tracking_scroll = 0.5,
-        chroma_blend = 0.1, chroma_loss = 0.0001, chroma_delay = 0.0, chroma_delay_v = 0.0,
-        frame_bounce = 0.02, frame_step = 2.0, breath = 0.04,
-        flag = 0.7, generations = 1,
-    },
-    ["vhs-damaged"] = {
-        wear = 1.0, dropout = 0.03, grain = 0.060, scratch = 0.8, crease = 0.8,
-        doc = 0.7, sparkle = 0.9, chroma_phase = 0.08, wobble = 0.02,
-        band = 30.0, life = 70.0, position = 0.0,
-        speed = "lp", decode = "comb1",
-        headswitch = 10.0, headswitch_offset = 1.0, headswitch_shift = 0.12,
-        wow = 0.001, flutter = 0.0005,
-        framelock = 0.70, tbc = 0.60, noise = 1.2, tracking = 0.5,
-        tracking_height = 40.0, tracking_scroll = 0.4,
-        chroma_blend = 0.2, chroma_loss = 0.0003, chroma_delay = 5.0, chroma_delay_v = 1.0,
-        frame_bounce = 0.015, frame_step = 2.0, breath = 0.06,
-        flag = 0.5, generations = 1,
-        rf_loss = 0.0, killer = 0.0, sync_loss = 0.0,
-    },
-    -- Not wear: a tape that physically takes the signal away. The patch of
-    -- bad tape is where the killer trips, the servo lets go and the raster
-    -- becomes snow; everything outside it still looks like a worn tape.
-    ["vhs-wrecked"] = {
-        wear = 1.2, dropout = 0.04, grain = 0.080, scratch = 1.0, crease = 1.0,
-        doc = 0.5, sparkle = 1.0, chroma_phase = 0.20, wobble = 0.06,
-        band = 20.0, life = 40.0, position = 0.0,
-        speed = "ep", decode = "notch",
-        headswitch = 12.0, headswitch_offset = 1.0, headswitch_shift = 0.20,
-        wow = 0.002, flutter = 0.001,
-        framelock = 0.20, tbc = 0.10, noise = 1.6, tracking = 0.9,
-        tracking_height = 64.0, tracking_scroll = 0.8,
-        chroma_blend = 0.4, chroma_loss = 0.002, chroma_delay = 8.0, chroma_delay_v = 2.0,
-        frame_bounce = 0.05, frame_step = 2.0, breath = 0.12,
-        flag = 1.0, generations = 2,
-        rf_loss = 1.0, killer = 1.0, sync_loss = 1.0, roll_speed = 1.0 / 90.0, roll_skew = 0.06, dead_density = 0.05,
+    ["wrecked"] = {
+        wear = 1.30, dropout = 0.040, grain = 0.080, scratch = 1.00, crease = 1.00,
+        chroma_phase = 0.20, wobble = 0.060,
+        band = 20.0, life = 40.0, breath = 0.12,
+        rf_loss = 1.0,
     },
 }
 
-local preset_order = { "vhs-new", "vhs-used", "vhs-old", "vhs-veryold", "vhs-dub", "vhs-baddeck", "vhs-damaged", "vhs-wrecked" }
-local preset_name = nil
-local preset_count = 0
+local deck_presets = {
+    ["good"] = {
+        headswitch = 3.0, headswitch_offset = 1.0, headswitch_shift = 0.04,
+        wow = 0.0002, flutter = 0.0001, framelock = 0.995, tbc = 0.96, noise = 0.65,
+        tracking = 0.0, tracking_height = 12.0, tracking_scroll = 0.0,
+        tracking_wave = 15.0, tracking_snow = 0.05, tracking_noise = 0.15, tracking_anisotropy = 0.25,
+        frame_bounce = 0.003, flag = 0.0,
+        doc = 1.0, sparkle = 0.60, killer = 1.0, sync_loss = 0.20,
+        roll_speed = 1.0 / 90.0, roll_skew = 0.04, dead_density = 0.005,
+    },
+    ["worn"] = {
+        headswitch = 5.0, headswitch_offset = 1.0, headswitch_shift = 0.06,
+        wow = 0.0006, flutter = 0.0003, framelock = 0.97, tbc = 0.85, noise = 0.90,
+        tracking = 0.05, tracking_height = 20.0, tracking_scroll = 0.10,
+        tracking_wave = 18.0, tracking_snow = 0.10, tracking_noise = 0.25, tracking_anisotropy = 0.30,
+        frame_bounce = 0.006, flag = 0.05,
+        doc = 0.95, sparkle = 0.75, killer = 1.0, sync_loss = 0.40,
+        roll_speed = 1.0 / 90.0, roll_skew = 0.05, dead_density = 0.006,
+    },
+    ["old"] = {
+        headswitch = 8.0, headswitch_offset = 1.0, headswitch_shift = 0.10,
+        wow = 0.0010, flutter = 0.0005, framelock = 0.85, tbc = 0.65, noise = 1.20,
+        tracking = 0.20, tracking_height = 32.0, tracking_scroll = 0.25,
+        tracking_wave = 24.0, tracking_snow = 0.20, tracking_noise = 0.40, tracking_anisotropy = 0.40,
+        frame_bounce = 0.012, flag = 0.20,
+        doc = 0.85, sparkle = 0.85, killer = 0.95, sync_loss = 0.65,
+        roll_speed = 1.0 / 90.0, roll_skew = 0.06, dead_density = 0.010,
+    },
+    ["bad"] = {
+        headswitch = 10.0, headswitch_offset = 2.0, headswitch_shift = 0.15,
+        wow = 0.0015, flutter = 0.0008, framelock = 0.50, tbc = 0.20, noise = 1.30,
+        tracking = 0.60, tracking_height = 48.0, tracking_scroll = 0.50,
+        tracking_wave = 32.0, tracking_snow = 0.40, tracking_noise = 0.55, tracking_anisotropy = 0.55,
+        frame_bounce = 0.020, flag = 0.70,
+        doc = 0.70, sparkle = 0.95, killer = 0.75, sync_loss = 0.90,
+        roll_speed = 1.0 / 75.0, roll_skew = 0.08, dead_density = 0.020,
+    },
+    ["dead"] = {
+        headswitch = 12.0, headswitch_offset = 1.0, headswitch_shift = 0.20,
+        wow = 0.0020, flutter = 0.0010, framelock = 0.20, tbc = 0.10, noise = 1.60,
+        tracking = 0.90, tracking_height = 64.0, tracking_scroll = 0.80,
+        tracking_wave = 40.0, tracking_snow = 0.60, tracking_noise = 0.70, tracking_anisotropy = 0.70,
+        frame_bounce = 0.050, flag = 1.00,
+        doc = 0.50, sparkle = 1.00, killer = 0.40, sync_loss = 1.00,
+        roll_speed = 1.0 / 60.0, roll_skew = 0.12, dead_density = 0.035,
+    },
+}
 
-for _, name in ipairs(preset_order) do
-    if riteg.has_option(name) then
-        preset_name = name
-        preset_count = preset_count + 1
+local function select_stage(name, presets)
+    if not riteg.has_option(name) then
+        return nil, nil
     end
+
+    local value = riteg.get_option_string(name, "")
+
+    if presets[value] then
+        return value, presets[value]
+    end
+
+    riteg.log_warning(string.format("unknown -%s value '%s'; using seed defaults", name, value))
+    return nil, nil
 end
 
-if preset_count > 1 then
-    riteg.log_warning("multiple VHS presets specified; using -" .. preset_name)
-end
+local tape_preset_name, tape_preset = select_stage("tape", tape_presets)
+local deck_preset_name, deck_preset = select_stage("deck", deck_presets)
 
-local preset = preset_name and presets[preset_name] or nil
-
+-- A stage preset is a default, not an override: individual options win.
 local function preset_value(key, fallback)
-    if preset and preset[key] ~= nil then
-        return preset[key]
+    if tape_preset and tape_preset[key] ~= nil then
+        return tape_preset[key]
+    end
+
+    if deck_preset and deck_preset[key] ~= nil then
+        return deck_preset[key]
     end
 
     return fallback
 end
 
 -- One run is one tape played on one deck. -seed makes the pair reproducible,
--- -tape and -deck override a single side of it. Wear is derived from the tape
--- id by default, so two different tapes are worn differently without any
--- extra arguments.
+-- and -tape-seed / -deck-seed override a single side of it. Wear is derived
+-- from the tape id by default, so two different tapes are worn differently
+-- without any extra arguments.
 local base_seed = math.floor(option("seed", math.random(0, 65535), 0, 65535))
-local tape_seed = math.floor(option("tape", base_seed, 0, 65535))
-local deck_seed = math.floor(option("deck", (base_seed * 1664525 + 1013904223) % 65536, 0, 65535))
+local tape_seed = math.floor(option("tape-seed", base_seed, 0, 65535))
+local deck_seed = math.floor(option("deck-seed", (base_seed * 1664525 + 1013904223) % 65536, 0, 65535))
 
 -- Stable per-deck pseudo-random value. Used only for defaults; every one of
 -- these is overridable, so a deck can be described by a seed or by hand.
@@ -294,79 +319,84 @@ end
 -- and scratches. Wear is a threshold on the tape field, not a screen overlay.
 -- Defaults are a nearly new tape: enough wear for a slightly grainy, slightly
 -- soft picture, but below the oxide/dropout thresholds. Wear it down with
--- -wear 1.0 and up.
-local tape_wear = option("wear", preset_value("wear", 0.05 + 0.03 * (tape_seed % 5) / 4.0), 0.0, 2.0)
-local tape_dropout = option("dropout", preset_value("dropout", 0.001 + 0.0005 * (tape_seed % 5) / 4.0), 0.0, 1.0)
-local tape_grain = option("grain", preset_value("grain", 0.018 + 0.006 * (tape_seed % 5) / 4.0), 0.0, 0.3)
-local tape_scratch = option("scratch", preset_value("scratch", 0.0), 0.0, 1.0)
-local tape_crease = option("crease", preset_value("crease", 0.0), 0.0, 1.0)
-local tape_doc = option("doc", preset_value("doc", 1.0), 0.0, 1.0)
-local tape_sparkle = option("sparkle", preset_value("sparkle", 0.8), 0.0, 1.0)
-local tape_chroma_phase = option("chroma-phase", preset_value("chroma_phase", 0.02 + 0.01 * (tape_seed % 5) / 4.0), 0.0, 1.0)
-local tape_wobble = option("wobble", preset_value("wobble", 0.005 + 0.003 * (tape_seed % 5) / 4.0), 0.0, 0.1)
+-- -tape-wear 1.0 and up.
+local tape_wear = option("tape-wear", preset_value("wear", 0.05 + 0.03 * (tape_seed % 5) / 4.0), 0.0, 2.0)
+local tape_dropout = option("tape-dropout", preset_value("dropout", 0.001 + 0.0005 * (tape_seed % 5) / 4.0), 0.0, 1.0)
+local tape_grain = option("tape-grain", preset_value("grain", 0.018 + 0.006 * (tape_seed % 5) / 4.0), 0.0, 0.3)
+local tape_scratch = option("tape-scratch", preset_value("scratch", 0.0), 0.0, 1.0)
+local tape_crease = option("tape-crease", preset_value("crease", 0.0), 0.0, 1.0)
+local tape_chroma_phase = option("tape-chroma-phase", preset_value("chroma_phase", 0.02 + 0.01 * (tape_seed % 5) / 4.0), 0.0, 1.0)
+local tape_wobble = option("tape-wobble", preset_value("wobble", 0.005 + 0.003 * (tape_seed % 5) / 4.0), 0.0, 0.1)
 
 -- Tape geometry. A track holds one field (240 active lines), a frame is two
 -- tracks. `band` is the along-track height of the coarsest wear patch in field
 -- lines; `tape-life` is its across-track length in tracks. They are
 -- deliberately separate: a tall patch can be short-lived and vice versa.
-local tape_band = option("band", preset_value("band", 48.0 + 16.0 * tape_rand(11)), 4.0, 160.0)
+local tape_band = option("tape-band", preset_value("band", 48.0 + 16.0 * tape_rand(11)), 4.0, 160.0)
 local tape_life = option("tape-life", preset_value("life", 96.0 + 64.0 * tape_rand(12)), 4.0, 512.0)
-local tape_position = option("position", preset_value("position", 0.0), 0.0, 65535.0)
-local tape_length = math.floor(option("tape-length", preset_value("tape_length", 3600.0), 240.0, 65536.0))
+local tape_position = option("tape-position", 0.0, 0.0, 65535.0)
+local tape_length = math.floor(option("tape-length", 3600.0, 240.0, 65536.0))
 
-local tape_deck = option_string("speed", preset_value("speed", "sp"), tape_speeds)
-local tape_speed = tape_speeds[tape_deck]
+local signal_speed_name = option_string("signal-speed", "sp", tape_speeds)
+local signal_speed = tape_speeds[signal_speed_name]
 
 -- Decode mode numbers must match the #if branches in NTSC_fullDecodeYIQ.
 local decode_names = { notch = 0, comb1 = 1, comb2 = 2, ["2d"] = 3, ["2d-adaptive"] = 4 }
-local decode_name = option_string("decode", preset_value("decode", "2d"), decode_names)
+local decode_name = option_string("signal-decode", "notch", decode_names)
 local decode_mode = decode_names[decode_name]
 
 -- The comb and 2D luma estimators subtract some chroma from the composite.
 -- Put it back so a flat colour keeps the same saturation as the notch decoder.
+-- The 2D kernel at the real half-subcarrier spacing removes chroma exactly, so
+-- 2d/2d-adaptive need no boost; the old 2.2 was compensating for the 4fsc tap
+-- spacing being applied at 2 * base_wide.
 local comb_saturation_boost = 1.0
 if decode_name == "comb1" or decode_name == "comb2" then
     comb_saturation_boost = 1.4
 elseif decode_name == "2d" then
-    comb_saturation_boost = 2.2
+    comb_saturation_boost = 1.0
 elseif decode_name == "2d-adaptive" then
-    comb_saturation_boost = 1.5
+    comb_saturation_boost = 1.0
 end
 
 -- Deck condition. Head switch, wow/flutter, frame lock and TBC are the deck's,
 -- not the tape's; only the head-to-tape contact is shared. Head-switch values
 -- are in lines, not in frame fractions.
-local deck_headswitch_height = option("headswitch", preset_value("headswitch", 4.0), 0.0, 24.0)
-local deck_headswitch_offset = option("headswitch-offset", preset_value("headswitch_offset", 1.0), 0.0, 24.0)
-local deck_headswitch_shift = option("headswitch-shift", preset_value("headswitch_shift", 0.05), -0.5, 0.5)
-local deck_headswitch_power = option("headswitch-power", 1.5, 1.0, 4.0)
-local deck_headswitch_jitter = option("headswitch-jitter", 0.002, 0.0, 0.05)
-local deck_headswitch_midline = option("headswitch-midline", 1.0, 0.0, 1.0)
-local deck_headswitch_midline_pos = option("headswitch-midline-pos", 0.8, 0.0, 1.0)
-local deck_headswitch_midline_jitter = option("headswitch-midline-jitter", 0.03, 0.0, 0.2)
-local deck_wow = option("wow", preset_value("wow", 0.0001 + 0.0002 * deck_rand(2)), 0.0, 0.01)
-local deck_flutter = option("flutter", preset_value("flutter", 0.00005 + 0.00008 * deck_rand(3)), 0.0, 0.005)
-local deck_framelock = option("framelock", preset_value("framelock", 0.985 + 0.013 * deck_rand(4)), 0.0, 1.0)
-local deck_tbc = option("tbc", preset_value("tbc", 0.94 + 0.05 * deck_rand(5)), 0.0, 1.0)
-local deck_noise = option("noise", preset_value("noise", 0.55 + 0.25 * deck_rand(6)), 0.0, 2.0)
-local deck_tracking = option("tracking", preset_value("tracking", 0.0), 0.0, 1.0)
-local deck_tracking_height = option("tracking-height", preset_value("tracking_height", 24.0), 0.0, 120.0)
-local deck_tracking_scroll = option("tracking-scroll", preset_value("tracking_scroll", 0.0), 0.0, 1.0)
-local deck_tracking_wave = option("tracking-wave", 15.0, 0.0, 50.0)
-local deck_tracking_snow = option("tracking-snow", 0.10, 0.0, 1.0)
-local deck_tracking_noise = option("tracking-noise", 0.25, 0.0, 1.0)
-local deck_tracking_anisotropy = option("tracking-anisotropy", 0.25, 0.0, 1.0)
-local deck_frame_bounce = option("frame-bounce", preset_value("frame_bounce", 0.004), 0.0, 0.1)
-local deck_frame_step = option("frame-step", preset_value("frame_step", 2.0), 1.0, 12.0)
+local deck_headswitch_height = option("deck-headswitch", preset_value("headswitch", 4.0), 0.0, 24.0)
+local deck_headswitch_offset = option("deck-headswitch-offset", preset_value("headswitch_offset", 1.0), 0.0, 24.0)
+local deck_headswitch_shift = option("deck-headswitch-shift", preset_value("headswitch_shift", 0.05), -0.5, 0.5)
+local deck_headswitch_power = option("deck-headswitch-power", 1.5, 1.0, 4.0)
+local deck_headswitch_jitter = option("deck-headswitch-jitter", 0.002, 0.0, 0.05)
+local deck_headswitch_midline = option("deck-headswitch-midline", 1.0, 0.0, 1.0)
+local deck_headswitch_midline_pos = option("deck-headswitch-midline-pos", 0.8, 0.0, 1.0)
+local deck_headswitch_midline_jitter = option("deck-headswitch-midline-jitter", 0.03, 0.0, 0.2)
+local deck_wow = option("deck-wow", preset_value("wow", 0.0001 + 0.0002 * deck_rand(2)), 0.0, 0.01)
+local deck_flutter = option("deck-flutter", preset_value("flutter", 0.00005 + 0.00008 * deck_rand(3)), 0.0, 0.005)
+local deck_framelock = option("deck-framelock", preset_value("framelock", 0.985 + 0.013 * deck_rand(4)), 0.0, 1.0)
+local deck_tbc = option("deck-tbc", preset_value("tbc", 0.94 + 0.05 * deck_rand(5)), 0.0, 1.0)
+local deck_noise = option("deck-noise", preset_value("noise", 0.55 + 0.25 * deck_rand(6)), 0.0, 2.0)
+local deck_tracking = option("deck-tracking", preset_value("tracking", 0.0), 0.0, 1.0)
+local deck_tracking_height = option("deck-tracking-height", preset_value("tracking_height", 24.0), 0.0, 120.0)
+local deck_tracking_scroll = option("deck-tracking-scroll", preset_value("tracking_scroll", 0.0), 0.0, 1.0)
+local deck_tracking_wave = option("deck-tracking-wave", preset_value("tracking_wave", 15.0), 0.0, 50.0)
+local deck_tracking_snow = option("deck-tracking-snow", preset_value("tracking_snow", 0.10), 0.0, 1.0)
+local deck_tracking_noise = option("deck-tracking-noise", preset_value("tracking_noise", 0.25), 0.0, 1.0)
+local deck_tracking_anisotropy = option("deck-tracking-anisotropy", preset_value("tracking_anisotropy", 0.25), 0.0, 1.0)
+local deck_frame_bounce = option("deck-frame-bounce", preset_value("frame_bounce", 0.004), 0.0, 0.1)
+local deck_frame_step = option("deck-frame-step", 2.0, 1.0, 12.0)
 local deck_track_phase = deck_rand(13)
 local deck_wow_phase = deck_rand(14)
 local deck_flutter_phase = deck_rand(15)
+local deck_doc = option("deck-doc", preset_value("doc", 1.0), 0.0, 1.0)
+local deck_sparkle = option("deck-sparkle", preset_value("sparkle", 0.8), 0.0, 1.0)
+local deck_flag = option("deck-flag", preset_value("flag", 0.0), 0.0, 1.0)
 
--- Chroma path.
-local chroma_delay_h = option("chroma-delay-h", preset_value("chroma_delay", 0.0), -32.0, 32.0)
-local chroma_delay_v = option("chroma-delay-v", preset_value("chroma_delay_v", 0.0), -8.0, 8.0)
-local chroma_blend = option("chroma-blend", preset_value("chroma_blend", 0.0), 0.0, 1.0)
-local chroma_loss = option("chroma-loss", preset_value("chroma_loss", 0.0), 0.0, 0.1)
+-- Chroma path. There is no chroma preset: the delay follows the selected tape
+-- speed by default, everything else is explicit.
+local chroma_delay_h = option("chroma-delay-h", signal_speed.delay, -32.0, 32.0)
+local chroma_delay_v = option("chroma-delay-v", 0.0, -8.0, 8.0)
+local chroma_blend = option("chroma-blend", 0.1, 0.0, 1.0)
+local chroma_loss = option("chroma-loss", 0.0, 0.0, 0.1)
 
 -- FBM grain.
 local grain_frequency = option("grain-frequency", 0.25, 0.01, 1.0)
@@ -374,47 +404,49 @@ local grain_detail = math.floor(option("grain-detail", 2, 1, 5))
 
 -- How many record/playback passes the picture makes. 1 is one deck, 2 is a
 -- single dub. Every pass applies the VHS record bandwidth again, so softness,
--- noise and chroma phase error accumulate like they do on real copies. A new
--- tape on a working deck is a single pass.
-local generations = math.floor(option("generations", preset_value("generations", 1), 1, 4))
+-- noise and chroma phase error accumulate like they do on real copies. The
+-- decoder restores the recorded chroma scale on every pass; the display
+-- saturation gain is applied once in final_rgb, so colour does not compound.
+-- A new tape on a working deck is a single pass.
+local generations = math.floor(option("signal-generations", 1, 1, 4))
 
 local tape_slant <const> = 2.0 / base_tall
-local tape_breath = option("breath", preset_value("breath", 0.02 + 0.01 * tape_rand(13)), 0.0, 0.1)
-local flag_amount = option("flag", preset_value("flag", 0.0), 0.0, 1.0)
+local tape_breath = option("tape-breath", preset_value("breath", 0.02 + 0.01 * tape_rand(13)), 0.0, 0.1)
 
 -- Signal loss. A bad patch of tape does not just dirty the picture: it takes
 -- the colour and the sync away. RF quality is a scalar per frame (one track
 -- under the head), derived from the track index, so the same spot on the tape
--- breaks on every pass and -tape/-seed stay reproducible.
-local rf_loss = option("rf-loss", preset_value("rf_loss", 0.0), 0.0, 1.0)
-local killer_amount = option("killer", preset_value("killer", 0.0), 0.0, 1.0)
-local sync_loss = option("sync-loss", preset_value("sync_loss", 0.0), 0.0, 1.0)
-local roll_speed = option("roll-speed", preset_value("roll_speed", 1.0 / 90.0), 1.0 / 600.0, 1.0 / 10.0)
-local roll_skew = option("roll-skew", preset_value("roll_skew", 0.06), 0.0, 0.5)
+-- breaks on every pass and -tape-seed/-seed stay reproducible. The tape owns
+-- the depth of the bad patch; how the deck reacts to it is the deck's job.
+local tape_rf_loss = option("tape-rf-loss", preset_value("rf_loss", 0.0), 0.0, 1.0)
+local deck_killer = option("deck-killer", preset_value("killer", 1.0), 0.0, 1.0)
+local deck_sync_loss = option("deck-sync-loss", preset_value("sync_loss", 1.0), 0.0, 1.0)
+local deck_roll_speed = option("deck-roll-speed", preset_value("roll_speed", 1.0 / 90.0), 1.0 / 600.0, 1.0 / 10.0)
+local deck_roll_skew = option("deck-roll-skew", preset_value("roll_skew", 0.06), 0.0, 0.5)
 
 -- How dense the raster is while there is no RF at all. This is the V9
 -- analogue of V8's VHS_DROPOUT_STRENGTH: low is sparse dashes on black,
 -- high is a nearly white raster with coloured dashes.
-local dead_density = option("dead-density", preset_value("dead_density", 0.05), 0.0, 1.0)
+local deck_dead_density = option("deck-dead-density", preset_value("dead_density", 0.005), 0.0, 1.0)
 
 -- Peak level of baseband snow (dropout head, scratch, tracking, crease).
 -- A hole is lost signal, but a bar at full white reads as a blown highlight
 -- rather than noise, so the level stays below the clip point.
-local snow_level = option("snow-level", preset_value("snow_level", 0.55), 0.0, 1.0)
+local deck_snow_level = option("deck-snow-level", 0.55, 0.0, 1.0)
 
 -- Speed-dependent bandwidth. A VHS line is 227.5 subcarrier cycles long and
 -- the line rate is 15734 Hz, so a cutoff in Hz maps to a fixed number of
 -- cycles per line. The pre-band Gaussian gets its sigma from the same number.
 local line_rate <const> = 15734.0
-local luma_cols = math.floor(2.0 * tape_speed.luma / line_rate + 0.5)
-local chroma_cols = math.floor(2.0 * tape_speed.chroma / line_rate + 0.5)
+local luma_cols = math.floor(2.0 * signal_speed.luma / line_rate + 0.5)
+local chroma_cols = math.floor(2.0 * signal_speed.chroma / line_rate + 0.5)
 luma_cols = math.min(math.max(luma_cols, 64), 2048)
 chroma_cols = math.min(math.max(chroma_cols, 8), 512)
 
 local downsample_wide <const> = luma_cols + 3
 local pixel_rate <const> = base_wide * line_rate
-local pre_y_sigma = 0.1874 * pixel_rate / tape_speed.luma
-local pre_iq_sigma = 0.1874 * pixel_rate / tape_speed.chroma
+local pre_y_sigma = 0.1874 * pixel_rate / signal_speed.luma
+local pre_iq_sigma = 0.1874 * pixel_rate / signal_speed.chroma
 local pre_y_radius = math.min(12, math.ceil(3.0 * pre_y_sigma))
 local pre_iq_radius = math.min(24, math.ceil(3.0 * pre_iq_sigma / 2.0))
 
@@ -450,24 +482,21 @@ local luma_wavelength <const> = encode_wide / (2.0 * (3.0e6 / 15734.0))
 
 local output_level <const> = 0.98 ^ generations
 
--- The empirical matrix was calibrated for two generations. If the flat-colour
--- transfer is roughly linear and the same on every pass, the inverse for N
--- passes is the two-generation inverse raised to N/2. These are the matrix
--- powers C^(N/2), flattened for GLSL column-major mat3.
+-- With saturation moved out of the per-generation decoder, the flat-colour
+-- transfer is (nearly) generation-independent, so one grade is enough. It is
+-- the empirical inverse of the one-pass transfer, flattened for GLSL
+-- column-major mat3.
 local color_corrections = {
     [1] = "mat3(0.950869012, -0.002758537, 0.119277997, -0.020392899, 1.045889499, -0.176065116, 0.068898331, -0.043055253, 1.050596230)",
-    [2] = "mat3(0.912426188, -0.010643677, 0.239216447, -0.052850288, 1.101521626, -0.371550428, 0.138775636, -0.090454783, 1.119551022)",
-    [3] = "mat3(0.884296458, -0.023948596, 0.362026246, -0.098316125, 1.168212888, -0.590592889, 0.210937284, -0.143191078, 1.208674895)",
-    [4] = "mat3(0.866281485, -0.043074082, 0.490037031, -0.157999869, 1.247520927, -0.837883151, 0.286769491, -0.202383727, 1.320200419)",
 }
-local color_correction = color_corrections[generations] or color_corrections[2]
+local color_correction = color_corrections[1]
 
 riteg.log_info(string.format(
-    "VHS hop: preset=%s tape=%d deck=%d gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f killer=%.2f sync=%.2f roll=%.5f skew=%.3f dead=%.2f",
-    preset_name or "new(default)", tape_seed, deck_seed, generations, tape_deck, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
+    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f killer=%.2f sync=%.2f roll=%.5f skew=%.3f dead=%.2f",
+    tape_preset_name or "default", tape_seed, deck_preset_name or "default", deck_seed, generations, signal_speed_name, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
     tape_position, tape_length, deck_tracking, deck_tracking_height, deck_tracking_scroll, deck_headswitch_height, deck_headswitch_offset,
-    deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, flag_amount, chroma_delay_h,
-    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, rf_loss, killer_amount, sync_loss, roll_speed, roll_skew, dead_density))
+    deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, deck_flag, chroma_delay_h,
+    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, deck_killer, deck_sync_loss, deck_roll_speed, deck_roll_skew, deck_dead_density))
 
 -- Define helpers keep the big shader string free of a 40-argument format call.
 local function define(name, value)
@@ -484,17 +513,17 @@ local defines = table.concat({
     define("TAPE_GRAIN", string.format("%.6f", tape_grain)),
     define("TAPE_BREATH", string.format("%.6f", tape_breath)),
     define("TAPE_CHROMA_PHASE", string.format("%.6f", tape_chroma_phase)),
-    define("TAPE_DOC", string.format("%.6f", tape_doc)),
-    define("TAPE_SPARKLE", string.format("%.6f", tape_sparkle)),
+    define("DECK_DOC", string.format("%.6f", deck_doc)),
+    define("DECK_SPARKLE", string.format("%.6f", deck_sparkle)),
     define("TAPE_SCRATCH", string.format("%.6f", tape_scratch)),
     define("TAPE_CREASE", string.format("%.6f", tape_crease)),
-    define("TAPE_FLAG", string.format("%.6f", flag_amount)),
+    define("DECK_FLAG", string.format("%.6f", deck_flag)),
     define("TAPE_WOBBLE", string.format("%.6f", tape_wobble)),
     -- Signal loss. The thresholds are the deck's, not the tape's: a killer
     -- snaps at its burst threshold and a servo needs a little more RF than
     -- the decoder does. Both are narrow on purpose, so the picture breaks
     -- instead of fading.
-    define("TAPE_RF_LOSS", string.format("%.6f", rf_loss)),
+    define("TAPE_RF_LOSS", string.format("%.6f", tape_rf_loss)),
     define("TAPE_RF_PATCH_TRACKS", string.format("%.4f", tape_rf_patch_tracks)),
     define("TAPE_RF_PERIOD", string.format("%.1f", tape_rf_period)),
     define("TAPE_LOCK_LO", "0.35"),
@@ -503,12 +532,12 @@ local defines = table.concat({
     define("TAPE_KILLER_HI", "0.52"),
     define("TAPE_DEAD_LO", "0.05"),
     define("TAPE_DEAD_HI", "0.15"),
-    define("TAPE_DEAD_DENSITY", string.format("%.6f", dead_density)),
-    define("VHS_SNOW_LEVEL", string.format("%.6f", snow_level)),
-    define("TAPE_KILLER", string.format("%.6f", killer_amount)),
-    define("TAPE_SYNC_LOSS", string.format("%.6f", sync_loss)),
-    define("TAPE_ROLL_SPEED", string.format("%.8f", roll_speed)),
-    define("TAPE_ROLL_SKEW", string.format("%.6f", roll_skew)),
+    define("TAPE_DEAD_DENSITY", string.format("%.6f", deck_dead_density)),
+    define("VHS_SNOW_LEVEL", string.format("%.6f", deck_snow_level)),
+    define("TAPE_KILLER", string.format("%.6f", deck_killer)),
+    define("TAPE_SYNC_LOSS", string.format("%.6f", deck_sync_loss)),
+    define("TAPE_ROLL_SPEED", string.format("%.8f", deck_roll_speed)),
+    define("TAPE_ROLL_SKEW", string.format("%.6f", deck_roll_skew)),
     define("TAPE_ROLL_STEP", "2.0"),
     define("TAPE_SLANT", string.format("%.6f", tape_slant)),
     define("TAPE_ROWS", "480.0"),
@@ -582,7 +611,11 @@ local defines = table.concat({
     define("DECODE_LOWPASS_WAVELENGTH", string.format("%.6f", luma_wavelength)),
     define("NTSC_SCALE", "1.0"),
     define("NOISE_STRENGTH", "0.015625"),
-    define("SATURATION", "4.0"),
+    -- The AM demodulator halves the chroma amplitude; restore it so a pass
+    -- encodes and decodes the same colour scale. OUTPUT_SATURATION is the
+    -- artistic display gain, applied once in final_rgb.
+    define("DECODE_CHROMA_GAIN", "2.0"),
+    define("OUTPUT_SATURATION", "2.0"),
     define("WINDOW_BIAS", "0.0"),
     define("VHS_DROPOUT_BLUR_STEPS", "64"),
     define("VHS_DROPOUT_MIN_STEPS", "0"),
@@ -595,9 +628,8 @@ local defines = table.concat({
     define("OUTPUT_LEVEL", string.format("%.6f", output_level)),
     define("RGB_TO_YIQ", "mat3(0.299, 0.587, 0.114, 0.595, -0.274, -0.3213, 0.2115, -0.5227, 0.3112)"),
     define("YIQ_TO_RGB", "mat3(1.0, 0.956, 0.619, 1.0, -0.272, -0.647, 1.0, -1.106, 1.703)"),
-    -- Empirical inverse of the flat-colour transfer at SATURATION = 4,
-    -- selected for the current generation count. Recompute the table if the
-    -- NTSC constants change.
+    -- Empirical inverse of the one-pass flat-colour transfer. Recompute it if
+    -- the NTSC constants or the decoder gain change.
     define("COLOR_CORRECTION", color_correction),
 }, "")
 
@@ -1134,10 +1166,14 @@ local common_glsl <const> = defines .. [[
             windowWeight += window;
         }
 
-        yiq.yz *= SATURATION / windowWeight;
+        yiq.yz *= DECODE_CHROMA_GAIN / windowWeight;
         return yiq;
 #else
-        float xStep = 2.0 * pixelWidth;
+        // The 2D comb must sample half a subcarrier period apart to land on
+        // inverted chroma phase. The old 2.0 px was correct for a 4fsc grid;
+        // the composite here is 2 * base_wide wide, so use the real half
+        // period (colorburst_wavelength) instead.
+        float xStep = COLORBURST_WAVELENGTH_DECODER * pixelWidth;
         float lumaCenter;
 
 #if DECODE_MODE == 1
@@ -1174,7 +1210,7 @@ local common_glsl <const> = defines .. [[
             weightSum += weight;
         }
 
-        iq *= SATURATION * COMB_SATURATION_BOOST / weightSum;
+        iq *= DECODE_CHROMA_GAIN * COMB_SATURATION_BOOST / weightSum;
         return vec3(lumaCenter, iq);
 #endif
     }
@@ -1598,6 +1634,20 @@ local vhs_chroma = make_pass(common_glsl .. [[
         vec2 previousField = texture(iChannel0, uv + vec2(0.0, 2.0 * pixel.y)).yz;
         vec2 chroma = mix(delayed, previousField, CHROMA_BLEND);
 
+        // The playback chroma grid is only VHS_MAXRES_IQ.x wide; interpolating
+        // it back leaves steps on flat colour. A one-sample horizontal blur
+        // hides the grid and matches the bandwidth the tape actually has.
+        vec2 chromaBlur = vec2(0.0);
+        float chromaWeight = 0.0;
+        for(int i = -2; i <= 2; ++i) {
+            float weight = 1.0 - abs(float(i)) / 3.0;
+            vec2 sampleUV = uv + vec2(float(i) * 0.5 / VHS_MAXRES_IQ.x, 0.0);
+
+            chromaBlur += texture(iChannel0, sampleUV).yz * weight;
+            chromaWeight += weight;
+        }
+        chroma = chromaBlur / chromaWeight;
+
         float row = floor(uv.y * TAPE_ROWS_PER_FIELD);
         uint lossState = Common_newRngStateEx(vec2(0.0, row), 95U);
         if(Common_randomFloat(lossState) < CHROMA_LOSS)
@@ -1665,7 +1715,7 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec3 held = prev.xyz + vec3(n1, n2, n3) * TAPE_DOC_NOISE;
 
         float mask = clamp(dropout.x, 0.0, 1.0);
-        vec3 result = mix(base, held, mask * TAPE_DOC);
+        vec3 result = mix(base, held, mask * DECK_DOC);
 
         // A dropout is a loss of signal, so it reads as coloured snow, not
         // as one flat white bar: luma and chroma are both noise here.
@@ -1682,7 +1732,7 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // Add the decaying mask to luma, like V8: one impulse makes a bright
         // head and a tail that fades to the right.
         result.x = min(1.0, result.x + mask * bandDead * VHS_SNOW_LEVEL);
-        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak * (1.0 - 0.90 * band) * TAPE_SPARKLE);
+        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak * (1.0 - 0.90 * band) * DECK_SPARKLE);
 
         // A scratch takes the whole row down, so it is snow at full strength.
         result.x = mix(result.x, snow, scratch);
@@ -1774,7 +1824,7 @@ local vhs_flagging = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord.xy / iResolution.xy;
-        float amount = TAPE_FLAG * (0.3 + 0.7 * DECK_TRACKING) * (1.0 - DECK_FRAMELOCK);
+        float amount = DECK_FLAG * (0.3 + 0.7 * DECK_TRACKING) * (1.0 - DECK_FRAMELOCK);
         float zone = 0.015 + 0.05 * amount;
 
         if(amount > 0.0 && uv.y > 1.0 - zone) {
@@ -1832,7 +1882,12 @@ local final_rgb = make_pass(common_glsl .. [[
         vec2 uv = fragCoord / iResolution.xy;
         vec4 color = texture(iChannel0, uv);
 
-        vec3 rgb = max(COLOR_CORRECTION * (color.xyz * YIQ_TO_RGB), vec3(0.0));
+        // Saturation is a display gain, not part of the record/decode chain:
+        // applying it here keeps it from compounding over generations.
+        vec3 yiq = color.xyz;
+        yiq.yz *= OUTPUT_SATURATION;
+
+        vec3 rgb = max(COLOR_CORRECTION * (yiq * YIQ_TO_RGB), vec3(0.0));
         fragColor.rgb = pow(rgb, vec3(GAMMA_CORRECTION)) * OUTPUT_LEVEL;
         fragColor.a = 1.0;
     }
