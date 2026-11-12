@@ -55,6 +55,7 @@
 --   -tape-length N            tape length in tracks
 --   -tape-breath X            head-to-tape contact breathing
 --   -tape-rf-loss X           depth of a bad patch that drops RF (0..1)
+--   -tape-rf-rows N           bad patch height along the field, in lines
 --
 -- Deck options (the VTR):
 --   -deck-seed N                   deck id; default: derived from -seed
@@ -204,19 +205,19 @@ local tape_presets = {
         wear = 1.00, dropout = 0.025, grain = 0.070, scratch = 0.50, crease = 0.40,
         chroma_phase = 0.10, wobble = 0.025,
         band = 24.0, life = 48.0, breath = 0.08,
-        rf_loss = 0.10,
+        rf_loss = 0.10, rf_rows = 72.0,
     },
     ["damaged"] = {
         wear = 1.10, dropout = 0.030, grain = 0.065, scratch = 0.90, crease = 0.90,
         chroma_phase = 0.12, wobble = 0.040,
         band = 28.0, life = 64.0, breath = 0.08,
-        rf_loss = 0.20,
+        rf_loss = 0.20, rf_rows = 96.0,
     },
     ["wrecked"] = {
         wear = 1.30, dropout = 0.040, grain = 0.080, scratch = 1.00, crease = 1.00,
         chroma_phase = 0.20, wobble = 0.060,
         band = 20.0, life = 40.0, breath = 0.12,
-        rf_loss = 1.0,
+        rf_loss = 1.0, rf_rows = 120.0,
     },
 }
 
@@ -428,6 +429,7 @@ local tape_breath = option("tape-breath", preset_value("breath", 0.02 + 0.01 * t
 -- breaks on every pass and -tape-seed/-seed stay reproducible. The tape owns
 -- the depth of the bad patch; how the deck reacts to it is the deck's job.
 local tape_rf_loss = option("tape-rf-loss", preset_value("rf_loss", 0.0), 0.0, 1.0)
+local tape_rf_rows = option("tape-rf-rows", preset_value("rf_rows", 96.0), 16.0, 240.0)
 local deck_killer = option("deck-killer", preset_value("killer", 1.0), 0.0, 1.0)
 local deck_sync_loss = option("deck-sync-loss", preset_value("sync_loss", 1.0), 0.0, 1.0)
 local deck_roll_speed = option("deck-roll-speed", preset_value("roll_speed", 1.0 / 90.0), 1.0 / 600.0, 1.0 / 10.0)
@@ -501,11 +503,11 @@ local color_corrections = {
 local color_correction = color_corrections[1]
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f killer=%.2f sync=%.2f hsync=%.2f smear=%.2f roll=%.5f skew=%.3f dead=%.2f",
+    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f rf_rows=%.1f killer=%.2f sync=%.2f hsync=%.2f smear=%.2f roll=%.5f skew=%.3f dead=%.2f",
     tape_preset_name or "default", tape_seed, deck_preset_name or "default", deck_seed, generations, signal_speed_name, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
     tape_position, tape_length, deck_tracking, deck_tracking_height, deck_tracking_scroll, deck_headswitch_height, deck_headswitch_offset,
     deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, deck_flag, chroma_delay_h,
-    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, deck_killer, deck_sync_loss, deck_hsync, deck_smear, deck_roll_speed,
+    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, tape_rf_rows, deck_killer, deck_sync_loss, deck_hsync, deck_smear, deck_roll_speed,
     deck_roll_skew, deck_dead_density))
 
 -- Define helpers keep the big shader string free of a 40-argument format call.
@@ -536,6 +538,7 @@ local defines = table.concat({
     define("TAPE_RF_LOSS", string.format("%.6f", tape_rf_loss)),
     define("TAPE_RF_PATCH_TRACKS", string.format("%.4f", tape_rf_patch_tracks)),
     define("TAPE_RF_PERIOD", string.format("%.1f", tape_rf_period)),
+    define("TAPE_RF_ROWS", string.format("%.4f", tape_rf_rows)),
     define("TAPE_LOCK_LO", "0.35"),
     define("TAPE_LOCK_HI", "0.55"),
     -- The line pulse dies before the frame does, so horizontal sync loss
@@ -840,23 +843,28 @@ local common_glsl <const> = defines .. [[
     }
 
     // ---- Signal loss ------------------------------------------------------
-    // The head reads one track at a time, so "is there usable RF right now"
-    // is a scalar per frame, not a per-pixel property. Deriving it from the
-    // track and not from a per-frame random is what makes a bad cassette
-    // break at the same spot every time it is played.
+    // The head reads one track at a time. A bad patch of tape is a run of
+    // field lines, not a whole frame: the head writes the track along its
+    // length, so `along` is the position inside the field and `track` is the
+    // field. That is what lets a drop in RF cover the bottom third of the
+    // picture while the rest is still watchable.
 
-    float Tape_trackNow()
+    // 0..1 usable RF at a point of the field. Oxide wear alone never kills the
+    // picture; a bad patch of tape does. This is what the killer and the servo
+    // react to.
+    float Tape_rfAt(vec2 uv)
     {
-        return mod(iFrame * TAPE_TRACKS_PER_FRAME + TAPE_POSITION, TAPE_LENGTH_TRACKS);
+        float wear = Tape_wear(uv);
+        float along = Tape_along(uv) * (TAPE_ROWS_PER_FIELD / TAPE_RF_ROWS);
+        float patch = Tape_noisePeriodic(vec2(along, Tape_track(uv) / TAPE_RF_PATCH_TRACKS), 60U, TAPE_RF_PERIOD);
+        return clamp(1.0 - 0.35 * wear - TAPE_RF_LOSS * smoothstep(0.55, 0.85, patch), 0.0, 1.0);
     }
 
-    // 0..1 usable RF. Oxide wear alone never kills the picture; a bad patch
-    // of tape does. This is what the killer and the servo react to.
+    // One scalar for the deck state: the vertical servo sees the whole field,
+    // not one line, so frame-level behaviour samples the middle of it.
     float Tape_rfNow()
     {
-        float wear = Tape_wear(vec2(0.5, 0.5));
-        float patch = Tape_noisePeriodic(vec2(2.5, Tape_trackNow() / TAPE_RF_PATCH_TRACKS), 60U, TAPE_RF_PERIOD);
-        return clamp(1.0 - 0.35 * wear - TAPE_RF_LOSS * smoothstep(0.55, 0.85, patch), 0.0, 1.0);
+        return Tape_rfAt(vec2(0.5, 0.5));
     }
 
     // 1 while the servo has no lock. A deck with a good frame lock hides most
@@ -872,23 +880,23 @@ local common_glsl <const> = defines .. [[
     // horizontal phase has already slipped. A TBC that free-runs its own
     // oscillator hides part of it, but the timing is then the deck's, not the
     // tape's, so the remaining error is still visible.
-    float Tape_hSyncLost()
+    float Tape_hSyncLost(vec2 uv)
     {
-        float raw = 1.0 - smoothstep(TAPE_HSYNC_LO, TAPE_HSYNC_HI, Tape_rfNow());
+        float raw = 1.0 - smoothstep(TAPE_HSYNC_LO, TAPE_HSYNC_HI, Tape_rfAt(uv));
         return clamp(raw * (1.0 - 0.5 * DECK_TBC), 0.0, 1.0) * TAPE_SYNC_LOSS;
     }
 
     // The killer snaps, it does not fade: below the burst threshold the chroma
     // channel is muted, not desaturated. 1 is alive, 0 is black and white.
-    float Tape_colorKiller()
+    float Tape_colorKiller(vec2 uv)
     {
-        return mix(1.0, smoothstep(TAPE_KILLER_LO, TAPE_KILLER_HI, Tape_rfNow()), TAPE_KILLER);
+        return mix(1.0, smoothstep(TAPE_KILLER_LO, TAPE_KILLER_HI, Tape_rfAt(uv)), TAPE_KILLER);
     }
 
     // 1 when there is no RF at all: the raster is snow, not a dark picture.
-    float Tape_deadRf()
+    float Tape_deadRf(vec2 uv)
     {
-        return 1.0 - smoothstep(TAPE_DEAD_LO, TAPE_DEAD_HI, Tape_rfNow());
+        return 1.0 - smoothstep(TAPE_DEAD_LO, TAPE_DEAD_HI, Tape_rfAt(uv));
     }
 
     // Vertical hold lost: the frame advances by a fixed fraction per frame, so
@@ -928,7 +936,7 @@ local common_glsl <const> = defines .. [[
         // together, and a slow sway moves the whole picture. The TBC only
         // hides part of it (see Tape_hSyncLost), because there is no
         // reference left to correct to.
-        float lost = Tape_hSyncLost() * DECK_HSYNC;
+        float lost = Tape_hSyncLost(uv) * DECK_HSYNC;
         float row = floor(uv.y * TAPE_ROWS);
         uint hs = Common_newRngStateEx(vec2(0.0, floor(row / TAPE_HSYNC_STRIP)), 78U);
         float strip = Common_randomFloat(hs) * 2.0 - 1.0;
@@ -1622,7 +1630,7 @@ local vhs_dropout = make_pass(common_glsl .. [[
         // With no RF at all nothing else matters: the generator runs at the
         // dead density and every other source of holes is suppressed below.
         // Otherwise their bands would show through the snow as bright stripes.
-        float deadRf = Tape_deadRf();
+        float deadRf = Tape_deadRf(uv);
 
         // Keep the non-uniform V9 density: dropout clusters follow the tape
         // wear field and the bottom of the frame, instead of becoming a flat
@@ -1760,12 +1768,12 @@ local vhs_chroma = make_pass(common_glsl .. [[
         // DOC layer, so the picture loses colour while the dropout noise
         // below keeps its own: on a real deck the killer mutes the picture
         // chroma, it does not silence the head amplifier.
-        chroma *= mix(0.03, 1.0, Tape_colorKiller());
+        chroma *= mix(0.03, 1.0, Tape_colorKiller(uv));
 
-        // With no RF there is no burst either, so the decoder has nothing to
-        // lock its subcarrier to. Keep only a trace of colour: the dead raster
-        // is white snow with rare coloured flecks, not a rainbow.
-        chroma *= mix(1.0, 0.12, Tape_deadRf());
+        // The burst amplitude follows the RF, so the decoder's chroma gain
+        // falls off with it before the killer even snaps. This is what keeps
+        // the noise of a weak band white instead of a rainbow.
+        chroma *= mix(0.01, 1.0, smoothstep(0.45, 0.85, Tape_rfAt(uv)));
 
         fragColor = vec4(color.x, chroma, 1.0);
     }
@@ -1809,7 +1817,7 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // carrier to demodulate, so what is left of the picture is an average
         // along the line. The reach grows with the same signal loss that tears
         // the rows sideways at the read stage.
-        float weak = Tape_hSyncLost();
+        float weak = Tape_hSyncLost(uv);
         if(weak > 0.02) {
             float reach = mix(1.0, 18.0, weak);
             vec3 smear = vec3(0.0);
@@ -1845,6 +1853,10 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // that leaks past its line store.
         float doc = DECK_DOC * (1.0 - dead) * (1.0 - 0.5 * DECK_SPARKLE);
         vec3 result = mix(base, held, mask * doc);
+
+        // A dropout has no burst either, so its hole is monochrome noise. The
+        // colour that survives is the decoder's, not a second generator.
+        result.yz *= 1.0 - 0.9 * mask;
 
         // The decoded noise is zero-mean; on a CRT a read error reads as a
         // bright burst, so the hole also gets a luma floor. This is luma only:
@@ -1953,7 +1965,7 @@ local vhs_tracking = make_pass(common_glsl .. [[
         // With no RF the band has nothing extra to add: the whole raster is
         // already the noise the band would be showing, and adding it again
         // would just draw a bright stripe across the snow.
-        float band = Tape_tracking(uv) * (1.0 - Tape_deadRf());
+        float band = Tape_tracking(uv) * (1.0 - Tape_deadRf(uv));
 
         if(band <= 0.0) {
             fragColor = texture(iChannel0, uv);
