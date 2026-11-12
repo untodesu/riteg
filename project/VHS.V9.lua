@@ -85,7 +85,7 @@ local tape_tracking = option("tracking", 0.02, 0.0, 0.2)
 local tape_wobble = option("wobble", 0.02, 0.0, 0.1)
 local tape_doc = option("doc", 1.0, 0.0, 1.0)
 local tape_sparkle = option("sparkle", 0.8, 0.0, 1.0)
-local tape_scratch = option("scratch", 0.1, 0.0, 1.0)
+local tape_scratch = option("scratch", 0.0, 0.0, 1.0)
 
 -- A defect that is h rows tall covers about 4*h tracks at 480 lines, so it
 -- recurs for about 4*h frames. This is the one number that ties the vertical
@@ -130,15 +130,16 @@ local common_glsl <const> = string.format([[
     const float TAPE_DOC = %.4f;
     const float TAPE_DOC_NOISE = 0.15;
 
-    // A tape is never perfectly clean: this floor keeps a little grain
-    // everywhere, and the base fraction lets rare dropouts appear outside
-    // the worn bands. Both are zero when -wear or -dropout is zero.
+    // A tape is never perfectly clean: TAPE_DROPOUT_BASE keeps a little
+    // grain everywhere and lets rare dropouts appear on a fresh tape.
+    // TAPE_DROPOUT_WEAR adds general dropouts as the tape wears, so a bad
+    // tape snows all over and not only in its bands.
     const float TAPE_FLOOR = 0.02;
     const float TAPE_DROPOUT_BASE = 0.0002;
+    const float TAPE_DROPOUT_WEAR = 0.02;
 
-    // Opacity of the white dropout noise added on top of the compensated
-    // line. At 1 it saturates and hides the substitution; below 1 both the
-    // held line and the bright streak are visible.
+    // How much of a dropout is replaced by noise instead of the held line.
+    // At 1 the signal is gone; below 1 some of the compensated line shows.
     const float TAPE_SPARKLE = %.4f;
 
     // A scratch is a dead line: the head reads noise instead of signal, so
@@ -732,7 +733,10 @@ local vhs_dropout = make_pass(common_glsl .. [[
         uint rngState = Common_newRngState(cell);
 
         float density = TAPE_DROPOUT * smoothstep(0.25, 0.80, wear) * (0.4 + 0.6 * (1.0 - uv.y));
-        density = max(density, TAPE_DROPOUT * TAPE_DROPOUT_BASE * step(0.005, TAPE_WEAR));
+        float baseDropout = TAPE_DROPOUT * (TAPE_DROPOUT_BASE
+            + TAPE_DROPOUT_WEAR * smoothstep(0.30, 1.0, TAPE_WEAR))
+            * step(0.005, TAPE_WEAR);
+        density = max(density, baseDropout);
         density = max(density, Tape_scratch(uv));
 
         fragColor.x = step(1.0 - clamp(density, 0.0, 1.0), Common_randomFloat(rngState));
@@ -745,12 +749,13 @@ local vhs_dropout = make_pass(common_glsl .. [[
     }
 ]], base_wide, base_tall, { [0] = tape_mask })
 
--- The streak length is one per row, so a dropout stays a continuous run
--- instead of breaking up into dashes. Worn tape gives up longer.
+-- The length is per pixel, as in V8: neighbouring pixels disagree, so a run
+-- breaks into white and coloured fragments instead of one solid bar. The
+-- floor keeps any fragment at least VHS_DROPOUT_MIN_STEPS long.
 local vhs_dropout_blur = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
-        uint rngRow = Common_newRngState(vec2(0.0, fragCoord.y));
+        uint rngState = Common_newRngState(fragCoord);
 
         vec2 uv = fragCoord.xy / iResolution.xy;
         vec2 pixel = 1.0 / iResolution.xy;
@@ -759,7 +764,7 @@ local vhs_dropout_blur = make_pass(common_glsl .. [[
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
 
         int steps = int(max(float(VHS_DROPOUT_MIN_STEPS),
-            VHS_DROPOUT_BLUR_STEPS * (0.2 + 0.8 * wear) * Common_randomFloat(rngRow)));
+            VHS_DROPOUT_BLUR_STEPS * (0.2 + 0.8 * wear) * Common_randomFloat(rngState)));
 
         for(int i = 0; i < steps; ++i) {
             vec2 uvmod = vec2(uv.x - pixel.x * float(i), uv.y);
@@ -774,9 +779,9 @@ local vhs_dropout_blur = make_pass(common_glsl .. [[
 
 -- The baseband side of wear. Oxide loss first: the band loses fine detail,
 -- level and chroma, and gets its own chroma noise (VHS colour dies first).
--- Then the dropout layer: the compensator holds the previous line, and a
--- normal dropout keeps the V8 look of a bright additive streak. A scratch is
--- a whole dead row, so only there the signal is replaced by snow.
+-- Then the dropout layer: the compensator holds the previous line, but a
+-- dropout is lost signal, so luma and chroma become coloured snow. A scratch
+-- is the same loss for a whole row, at full strength.
 local vhs_dropout_combined = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
@@ -819,13 +824,15 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float mask = clamp(dropout.x, 0.0, 1.0);
         vec3 result = mix(base, held, mask * TAPE_DOC);
 
-        // Ordinary dropouts keep the V8 look: a bright additive streak.
+        // A dropout is a loss of signal, so it reads as coloured snow, not
+        // as one flat white bar: luma and chroma are both noise here.
         float scratch = Tape_scratch(uv);
         float streak = mask * (1.0 - scratch);
-        result.x += streak * TAPE_SPARKLE;
-        result.yz = mix(result.yz, 0.125 * dropout.yz, streak);
 
-        // A scratched row has no signal at all, so it is snow.
+        result.x = mix(result.x, snow, streak * TAPE_SPARKLE * 10.0);
+        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak);
+
+        // A scratch takes the whole row down, so it is snow at full strength.
         result.x = mix(result.x, snow, scratch);
         result.yz = mix(result.yz, vec2(n2, n3) * 0.12, scratch);
         result.x += grain;
