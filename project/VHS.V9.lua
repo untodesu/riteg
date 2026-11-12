@@ -85,6 +85,8 @@
 --   -deck-sparkle X                chroma noise in dropouts
 --   -deck-killer X                 how hard the colour killer mutes chroma
 --   -deck-sync-loss X              how readily the servo loses lock
+--   -deck-hsync X                  horizontal sync loss multiplier (0..1)
+--   -deck-smear X                  weak-signal horizontal smear (0..1)
 --   -deck-roll-speed X             frame offsets per frame while unlocked
 --   -deck-roll-skew X              horizontal shear per roll
 --   -deck-dead-density X           raster density with no RF
@@ -391,6 +393,13 @@ local deck_doc = option("deck-doc", preset_value("doc", 1.0), 0.0, 1.0)
 local deck_sparkle = option("deck-sparkle", preset_value("sparkle", 0.8), 0.0, 1.0)
 local deck_flag = option("deck-flag", preset_value("flag", 0.0), 0.0, 1.0)
 
+-- Horizontal hold. The line pulse is recovered from the same RF as the
+-- picture, so a weak carrier does not only kill the colour: the line
+-- oscillator free-runs and the picture tears sideways. Both controls are
+-- multipliers on the signal-dependent amount; 0 disables that half.
+local deck_hsync = option("deck-hsync", 1.0, 0.0, 1.0)
+local deck_smear = option("deck-smear", 1.0, 0.0, 1.0)
+
 -- Chroma path. There is no chroma preset: the delay follows the selected tape
 -- speed by default, everything else is explicit.
 local chroma_delay_h = option("chroma-delay-h", signal_speed.delay, -32.0, 32.0)
@@ -492,11 +501,12 @@ local color_corrections = {
 local color_correction = color_corrections[1]
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f killer=%.2f sync=%.2f roll=%.5f skew=%.3f dead=%.2f",
+    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f killer=%.2f sync=%.2f hsync=%.2f smear=%.2f roll=%.5f skew=%.3f dead=%.2f",
     tape_preset_name or "default", tape_seed, deck_preset_name or "default", deck_seed, generations, signal_speed_name, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
     tape_position, tape_length, deck_tracking, deck_tracking_height, deck_tracking_scroll, deck_headswitch_height, deck_headswitch_offset,
     deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, deck_flag, chroma_delay_h,
-    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, deck_killer, deck_sync_loss, deck_roll_speed, deck_roll_skew, deck_dead_density))
+    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, deck_killer, deck_sync_loss, deck_hsync, deck_smear, deck_roll_speed,
+    deck_roll_skew, deck_dead_density))
 
 -- Define helpers keep the big shader string free of a 40-argument format call.
 local function define(name, value)
@@ -528,6 +538,15 @@ local defines = table.concat({
     define("TAPE_RF_PERIOD", string.format("%.1f", tape_rf_period)),
     define("TAPE_LOCK_LO", "0.35"),
     define("TAPE_LOCK_HI", "0.55"),
+    -- The line pulse dies before the frame does, so horizontal sync loss
+    -- starts where the colour killer does and is full where the picture is
+    -- mostly noise. The strip height is in frame rows.
+    define("TAPE_HSYNC_LO", "0.20"),
+    define("TAPE_HSYNC_HI", "0.62"),
+    define("TAPE_HSYNC_STRIP", "12.0"),
+    define("TAPE_HSYNC_SHIFT", "0.025"),
+    define("DECK_HSYNC", string.format("%.6f", deck_hsync)),
+    define("DECK_SMEAR", string.format("%.6f", deck_smear)),
     define("TAPE_KILLER_LO", "0.45"),
     define("TAPE_KILLER_HI", "0.52"),
     define("TAPE_DEAD_LO", "0.05"),
@@ -848,6 +867,17 @@ local common_glsl <const> = defines .. [[
         return clamp(raw * (1.0 - 0.65 * DECK_FRAMELOCK), 0.0, 1.0) * TAPE_SYNC_LOSS;
     }
 
+    // 0 = the line pulse is still found, 1 = the line oscillator is free-run.
+    // This is not the vertical servo: a deck can hold the frame while the
+    // horizontal phase has already slipped. A TBC that free-runs its own
+    // oscillator hides part of it, but the timing is then the deck's, not the
+    // tape's, so the remaining error is still visible.
+    float Tape_hSyncLost()
+    {
+        float raw = 1.0 - smoothstep(TAPE_HSYNC_LO, TAPE_HSYNC_HI, Tape_rfNow());
+        return clamp(raw * (1.0 - 0.5 * DECK_TBC), 0.0, 1.0) * TAPE_SYNC_LOSS;
+    }
+
     // The killer snaps, it does not fade: below the burst threshold the chroma
     // channel is muted, not desaturated. 1 is alive, 0 is black and white.
     float Tape_colorKiller()
@@ -893,7 +923,21 @@ local common_glsl <const> = defines .. [[
         float scrape = (2.0 * Tape_noisePeriodic(vec2(along * 120.0, track / 6.0), 30U, TAPE_SCRAPE_PERIOD) - 1.0) * TAPE_WOBBLE * wear;
         float crease = Tape_crease(uv) * TAPE_CREASE_SHIFT;
 
-        return (wow + flutter + scrape + crease) * (1.0 - DECK_TBC);
+        // The horizontal loop is separate from the vertical servo. Without a
+        // line pulse it free-runs: short strips of rows slip sideways
+        // together, and a slow sway moves the whole picture. The TBC only
+        // hides part of it (see Tape_hSyncLost), because there is no
+        // reference left to correct to.
+        float lost = Tape_hSyncLost() * DECK_HSYNC;
+        float row = floor(uv.y * TAPE_ROWS);
+        uint hs = Common_newRngStateEx(vec2(0.0, floor(row / TAPE_HSYNC_STRIP)), 78U);
+        float strip = Common_randomFloat(hs) * 2.0 - 1.0;
+        float slip = step(0.55, Common_randomFloat(hs)) * (Common_randomFloat(hs) * 2.0 - 1.0) * 1.2;
+        float rowJitter = (Common_randomFloat(hs) * 2.0 - 1.0) * 0.20;
+        float sway = 2.0 * Deck_noise(vec2(float(iFrame) / 8.0, 0.5), 79U) - 1.0;
+        float tear = (strip + slip + rowJitter + 0.6 * sway) * TAPE_HSYNC_SHIFT * lost;
+
+        return (wow + flutter + scrape + crease) * (1.0 - DECK_TBC) + tear;
     }
 
     // Whole-frame vertical sync offset, in frame fractions. Only a deck that
@@ -1005,6 +1049,40 @@ local common_glsl <const> = defines .. [[
         }
 
         return result * lineIntensity;
+    }
+
+    // A row of lost RF is not per-pixel static: the head amplifier noise is
+    // smeared by the luma delay line and the CRT, so it reads as a few long
+    // runs along the line instead of a hash. The rows are field lines, so a
+    // run is two frame rows thick. `intensity` is the chance that a field line
+    // carries any run at all.
+    float Snow_streak(vec2 uv, uint salt, float intensity)
+    {
+        float px = uv.x * iResolution.x;
+        float row = floor(uv.y * TAPE_ROWS_PER_FIELD);
+        uint rowState = Common_newRngStateEx(vec2(0.0, row), salt);
+        float on = step(Common_randomFloat(rowState), clamp(intensity, 0.0, 1.0));
+
+        if(on <= 0.0)
+            return 0.0;
+
+        const float cellSize = 192.0;
+        float cell = floor(px / cellSize);
+        float result = 0.0;
+
+        for(int k = -1; k <= 0; ++k) {
+            float c = cell + float(k);
+            uint s = Common_newRngStateEx(vec2(c + 1000.0, row), salt + 1U);
+            float start = (c + Common_randomFloat(s)) * cellSize;
+            float len = mix(48.0, 320.0, Common_randomFloat(s));
+            float amp = 0.5 + 0.5 * Common_randomFloat(s);
+            float x = px - start;
+
+            if(x >= 0.0 && x < len)
+                result += amp * (1.0 - x / len);
+        }
+
+        return result;
     }
 
     float NTSC_sinc(float x)
@@ -1291,7 +1369,18 @@ local gamma_correct_src <const> = common_glsl .. [[
         // instead of straight up.
         float roll = Tape_roll();
         float bounce = Tape_frameOffset();
-        vec4 color = texture(iChannel0, vec2(uv.x + shift + roll * TAPE_ROLL_SKEW, fract(uv.y + bounce)));
+
+        // The tear can push a row past the edge of the raster. Do not clamp
+        // the edge pixel into that gap: the missing part is lost signal, not a
+        // stretched copy of the last column.
+        float x = uv.x + shift + roll * TAPE_ROLL_SKEW;
+        vec4 color;
+
+        if(x < 0.0 || x > 1.0)
+            color = vec4(0.0, 0.0, 0.0, 1.0);
+        else
+            color = texture(iChannel0, vec2(x, fract(uv.y + bounce)));
+
         fragColor.rgb = pow(color.rgb, vec3(1.0 / GAMMA_CORRECTION));
         fragColor.a = color.a;
     }
@@ -1489,10 +1578,10 @@ local vhs_upsample_src <const> = common_glsl .. [[
 ]]
 
 -- The mask is the only place the tape field is evaluated. R is wear, G is the
--- horizontal time-base error of that line (deck + tape + crease). It is one
--- sample per field line (480 rows, both fields) and 32 columns across, because
--- the tape pattern varies along the track and the frame is only wide because
--- the raster is. Consumers sample it at their own uv.
+-- horizontal time-base error of that line (deck + tape + crease + sync tear).
+-- It is one sample per field line (480 rows, both fields) and 32 columns
+-- across, because the tape pattern varies along the track and the frame is
+-- only wide because the raster is. Consumers sample it at their own uv.
 local tape_mask = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
@@ -1559,7 +1648,7 @@ local vhs_dropout = make_pass(common_glsl .. [[
         // once, here, instead of again at full resolution in the consumer.
         fragColor.w = deadRf;
     }
-]], base_wide / 2, base_tall, { [0] = tape_mask })
+]], base_wide / 4, base_tall, { [0] = tape_mask })
 
 -- Each impulse gets a random run length. The accumulation is a horizontal
 -- smear to the left, so the visible result is a bright head and a decaying
@@ -1706,6 +1795,29 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         base.yz *= 1.0 - 0.50 * oxide;
         base.yz += vec2(n2, n3) * 0.15 * oxide;
 
+        // Weak RF loses the horizontal detail first: the head amplifier has no
+        // carrier to demodulate, so what is left of the picture is an average
+        // along the line. The reach grows with the same signal loss that tears
+        // the rows sideways at the read stage.
+        float weak = Tape_hSyncLost();
+        if(weak > 0.02) {
+            float reach = mix(1.0, 18.0, weak);
+            vec3 smear = vec3(0.0);
+            float weight = 0.0;
+
+            for(int i = -18; i <= 18; ++i) {
+                float d = abs(float(i));
+                if(d > reach)
+                    continue;
+
+                float w = 1.0 - d / (reach + 1.0);
+                smear += texture(iChannel0, uv + vec2(float(i) * pixel.x, 0.0)).xyz * w;
+                weight += w;
+            }
+
+            base = mix(base, smear / max(weight, 1e-3), weak * 0.45 * DECK_SMEAR);
+        }
+
         // What the one-field-line delay holds. The raster runs from the top
         // of the picture down (uv.y = 1 -> 0), and one field line is two frame
         // rows, so the previous line is +2 rows, not -1.
@@ -1749,6 +1861,15 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         result.x = mix(result.x, snow, crease * 0.5);
         result.x *= 1.0 - 0.3 * crease;
 
+        // The carrier is gone, so the rest of the line is runs of head noise.
+        // A streak is white, not coloured: the killer has already taken the
+        // chroma out and only the luma of the noise is left.
+        if(weak > 0.02) {
+            float streak = Snow_streak(uv, 87U, weak * 0.35) * DECK_SMEAR;
+            result.x = min(1.0, result.x + streak * VHS_SNOW_LEVEL * (0.4 + 0.6 * weak));
+            result.yz *= 1.0 - 0.45 * streak * weak;
+        }
+
         // Contact breathing: a slow global level wobble that also lifts the
         // grain while the head is pressed harder against the tape.
         float breath = Tape_breath() * TAPE_BREATH;
@@ -1763,6 +1884,14 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec3 lost = vec3(0.05 + 0.95 * mask,
                          0.22 * dropout.y * mask,
                          0.22 * dropout.z * mask);
+
+        // A dead raster is the same wide-open head noise as a weak signal: a
+        // few long runs per field line, not a per-pixel hash. Without this the
+        // dropout compensation reads as fine static even at zero carrier.
+        if(dead > 0.0) {
+            float deadStreak = Snow_streak(uv, 88U, 0.35) * DECK_SMEAR;
+            lost.x = max(lost.x, deadStreak * VHS_SNOW_LEVEL * 0.9);
+        }
 
         fragColor = vec4(mix(result, lost, dead), 1.0);
     }
