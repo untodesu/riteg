@@ -553,6 +553,16 @@ local defines = table.concat({
     define("TAPE_DEAD_HI", "0.15"),
     define("TAPE_DEAD_DENSITY", string.format("%.6f", deck_dead_density)),
     define("VHS_SNOW_LEVEL", string.format("%.6f", deck_snow_level)),
+    -- Read-error presentation. Constants, not options: the thresholds belong
+    -- next to the noise they shape.
+    define("TAPE_READ_MUTE_LO", "0.05"),
+    define("TAPE_READ_MUTE_HI", "0.35"),
+    define("TAPE_CHROMA_FADE_LO", "0.45"),
+    define("TAPE_CHROMA_FADE_HI", "0.85"),
+    define("TAPE_DEAD_FLOOR", "0.22"),
+    define("TAPE_DEAD_GAIN", "0.78"),
+    define("TAPE_TRACKING_CHROMA_LO", "0.15"),
+    define("TAPE_TRACKING_CHROMA_HI", "0.65"),
     define("TAPE_KILLER", string.format("%.6f", deck_killer)),
     define("TAPE_SYNC_LOSS", string.format("%.6f", deck_sync_loss)),
     define("TAPE_ROLL_SPEED", string.format("%.8f", deck_roll_speed)),
@@ -1387,17 +1397,8 @@ local function ntsc_encode_src(gen)
             float noise = snowNoise + saltPepperNoise + sineNoise + rowNoise + rowSaltPepper;
             encoded += noise * NOISE_STRENGTH * DECK_NOISE;
 
-            // Read errors. A dropout, a scratch, a mistracked band, a crease or
-            // a dead carrier is the head reading noise instead of the tape.
-            // The noise belongs here, on the composite signal, so the decoder's
-            // own bandwidth and the colour killer shape it like the picture.
-            vec4 tape = texture(iChannel2, uv);
-            float holes = tape.x;
-            float dead = tape.w;
-            float scratch = Tape_scratch(uv);
-            float crease = Tape_crease(uv);
-            float track = Tape_tracking(uv) * (1.0 - Tape_deadRf(tape.z)) * DECK_TRACKING_SNOW;
-            float read = clamp(max(max(holes, scratch), max(crease, max(track, dead))), 0.0, 1.0);
+            // One read-error field, built once by vhs_dropout_blur.
+            float read = clamp(texture(iChannel2, uv).y, 0.0, 1.0);
 
             uint burstState = Common_newRngStateEx(fragCoord, 3U);
             float burst = (Common_randomFloat(burstState) * 2.0 - 1.0) * 2.5;
@@ -1611,7 +1612,21 @@ local vhs_dropout_blur = make_pass(common_glsl .. [[
         // Only the hole map is blurred. RF and the dead flag ride through
         // unblurred; the accumulation would otherwise sum them like a hole.
         vec4 meta = texture(iChannel0, uv);
-        fragColor = vec4(clamp(holes, 0.0, 1.0), 0.0, meta.z, meta.w);
+        float rf = meta.z;
+        float dead = meta.w;
+
+        // One read-error field for the whole pipeline: a dropout hole, a
+        // mistracked band, a scratch, a crease or a dead carrier all mean the
+        // head is reading noise, not tape.
+        float track = Tape_tracking(uv) * (1.0 - Tape_deadRf(rf)) * DECK_TRACKING_SNOW;
+        float scratch = Tape_scratch(uv);
+        float crease = Tape_crease(uv);
+        float read = max(max(clamp(holes, 0.0, 1.0), track), max(scratch, max(crease, dead)));
+
+        // .y is the shared read-error field: dropout, tracking, scratch,
+        // crease or dead, already combined. Every consumer samples it instead
+        // of rebuilding the same expression.
+        fragColor = vec4(clamp(holes, 0.0, 1.0), clamp(read, 0.0, 1.0), rf, dead);
     }
 ]], base_wide, base_tall, { [0] = vhs_dropout })
 
@@ -1679,22 +1694,18 @@ local vhs_chroma = make_pass(common_glsl .. [[
         // carrier loses colour before the DOC layer. The read-error noise is
         // already part of the signal here, so the killer mutes it too.
         float rf = texture(iChannel1, uv).z;
-        float holes = texture(iChannel2, uv).x;
-        float track = Tape_tracking(uv) * (1.0 - Tape_deadRf(rf));
-        float scratch = Tape_scratch(uv);
-        float crease = Tape_crease(uv);
-        float readMask = max(max(max(holes, track), max(scratch, crease)), Tape_deadRf(rf));
+        float readMask = texture(iChannel2, uv).y;
         chroma *= mix(0.03, 1.0, Tape_colorKiller(rf));
 
         // The burst amplitude follows the RF, so the decoder's chroma gain
         // falls off with it before the killer even snaps. This is what keeps
         // the noise of a weak band white instead of a rainbow.
-        chroma *= smoothstep(0.45, 0.85, rf);
+        chroma *= smoothstep(TAPE_CHROMA_FADE_LO, TAPE_CHROMA_FADE_HI, rf);
 
         // A read error has no burst at all: a dropout, a mistracked band or a
         // dead carrier is monochrome noise, not colour. Mute it at the source
         // so the residual chroma of a huge noise burst cannot survive.
-        chroma *= 1.0 - smoothstep(0.05, 0.35, readMask);
+        chroma *= 1.0 - smoothstep(TAPE_READ_MUTE_LO, TAPE_READ_MUTE_HI, readMask);
 
         fragColor = vec4(color.x, chroma, 1.0);
     }
@@ -1776,10 +1787,6 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float doc = DECK_DOC * (1.0 - dead) * (1.0 - 0.5 * DECK_SPARKLE);
         vec3 result = mix(base, held, mask * doc);
 
-        // A dropout has no burst either, so its hole is monochrome noise. The
-        // colour that survives is the decoder's, not a second generator.
-        result.yz *= 1.0 - smoothstep(0.15, 0.65, mask);
-
         // The decoded noise is zero-mean; on a CRT a read error reads as a
         // bright burst, so the hole also gets a luma floor. This is luma only:
         // the colour comes from the decoder, not from a second generator.
@@ -1792,7 +1799,7 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
 
         // No RF: the AGC opens up and the raster is the noise floor, not a
         // black screen.
-        result.x = mix(result.x, 0.22 + 0.78 * result.x, dead);
+        result.x = mix(result.x, TAPE_DEAD_FLOOR + TAPE_DEAD_GAIN * result.x, dead);
 
         fragColor = vec4(result, 1.0);
     }
@@ -1890,7 +1897,7 @@ local vhs_tracking = make_pass(common_glsl .. [[
             * DECK_TRACKING_WAVE / iResolution.x;
         vec4 color = texture(iChannel0, uv + vec2(wave * band, 0.0));
 
-        color.yz *= 1.0 - smoothstep(0.15, 0.65, band);
+        color.yz *= 1.0 - smoothstep(TAPE_TRACKING_CHROMA_LO, TAPE_TRACKING_CHROMA_HI, band);
 
         fragColor = color;
     }
