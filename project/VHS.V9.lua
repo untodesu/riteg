@@ -22,6 +22,10 @@
 -- tape wear. -tape and -deck pick two sides of the pair, and their defaults
 -- are derived from the same seed so a run is reproducible.
 --
+-- V9 deliberately models a 480-line VHS/S-VHS signal, not a resolution-agnostic
+-- effect. TAPE_ROWS is 480 and TAPE_ROWS_PER_FIELD is 240 by design; do not
+-- replace them with iResolution-derived values.
+--
 -- Presets set the whole parameter set at once; individual options still win:
 --   -vhs-new      new tape, healthy deck (the default)
 --   -vhs-used     light wear, still well tracked
@@ -30,7 +34,22 @@
 --   -vhs-dub      clean-ish tape, three record/playback generations
 --   -vhs-baddeck  new tape on a deck with bad tracking/TBC/frame lock
 --   -vhs-damaged  physically damaged tape: crease, scratch, dropouts, mistracking
--- Example: -vhs-old -wear 0.4 -tracking 0.02
+--
+-- Signal path options:
+--   -speed sp|lp|ep       luma/chroma cutoff and playback bandwidth
+--   -decode notch|comb1|comb2|2d|2d-adaptive   (default: 2d; notch = old look)
+--   -headswitch N         head-switch height in lines (was a fraction)
+--   -headswitch-offset N  lines of the switch hidden below the frame
+--   -headswitch-shift X   horizontal shift as a fraction of width
+--   -tracking-height N    bottom tracking band height in lines
+--   -tracking-scroll X    strength of the old scrolling tracking band
+--   -chroma-delay-h N     chroma offset in base pixels
+--   -chroma-delay-v N     chroma offset in field lines
+--   -chroma-blend X       vertical chroma blend with the previous field line
+--   -chroma-loss X        chance that a field line loses chroma entirely
+--   -grain-frequency X    FBM grain frequency in cycles per base pixel
+--   -grain-detail N       FBM grain octaves (1..5)
+-- Example: -vhs-old -wear 0.4 -tracking 0.02 -decode comb2
 
 -- ATTRIBUTION ATTRIBUTION ATTRIBUTION ATTRIBUTION
 -- ATTRIBUTION ATTRIBUTION ATTRIBUTION ATTRIBUTION
@@ -83,6 +102,26 @@ local function option(name, fallback, lo, hi)
     return math.min(math.max(riteg.get_option_number(name, fallback), lo), hi)
 end
 
+local function option_string(name, fallback, allowed)
+    local value = riteg.get_option_string(name, fallback)
+
+    if allowed[value] then
+        return value
+    end
+
+    riteg.log_warning(string.format("unknown -%s value '%s'; using '%s'", name, value, fallback))
+    return fallback
+end
+
+-- VHS tape speeds. Cutoffs are in Hz, delay is in 4fsc samples.
+-- S-VHS is intentionally not a separate mode here; it would extend this table
+-- with a wider luma cutoff and a separate Y/C path.
+local tape_speeds = {
+    sp = { luma = 2.4e6, chroma = 0.32e6, delay = 4 },
+    lp = { luma = 1.9e6, chroma = 0.30e6, delay = 5 },
+    ep = { luma = 1.4e6, chroma = 0.28e6, delay = 6 },
+}
+
 -- Named presets. A preset only supplies defaults: every individual option
 -- still wins over it, so `-vhs-old -wear 0.4` is valid. Pass exactly one
 -- preset; if several are present, the most severe one in `preset_order` wins.
@@ -90,65 +129,93 @@ end
 -- seed-to-seed variation in the exact wear and deck numbers.
 local presets = {
     ["vhs-new"] = {
-        wear = 0.06, dropout = 0.004, grain = 0.020, scratch = 0.0, crease = 0.0,
+        wear = 0.06, dropout = 0.001, grain = 0.020, scratch = 0.0, crease = 0.0,
         doc = 1.0, sparkle = 0.8, chroma_phase = 0.025, wobble = 0.006,
         band = 48.0, life = 96.0, position = 0.0,
-        headswitch = 0.006, wow = 0.0002, flutter = 0.0001,
+        speed = "sp", decode = "2d",
+        headswitch = 3.0, headswitch_offset = 1.0, headswitch_shift = 0.04,
+        wow = 0.0002, flutter = 0.0001,
         framelock = 0.995, tbc = 0.96, noise = 0.65, tracking = 0.0,
+        tracking_height = 12.0, tracking_scroll = 0.0,
+        chroma_blend = 0.0, chroma_loss = 0.0, chroma_delay = 0.0, chroma_delay_v = 0.0,
         frame_bounce = 0.004, frame_step = 2.0, breath = 0.025,
         flag = 0.0, generations = 1,
     },
     ["vhs-used"] = {
-        wear = 0.35, dropout = 0.02, grain = 0.035, scratch = 0.1, crease = 0.05,
+        wear = 0.35, dropout = 0.005, grain = 0.035, scratch = 0.1, crease = 0.05,
         doc = 1.0, sparkle = 0.8, chroma_phase = 0.04, wobble = 0.010,
         band = 40.0, life = 80.0, position = 0.0,
-        headswitch = 0.008, wow = 0.0004, flutter = 0.0002,
+        speed = "sp", decode = "2d",
+        headswitch = 4.0, headswitch_offset = 1.0, headswitch_shift = 0.05,
+        wow = 0.0004, flutter = 0.0002,
         framelock = 0.98, tbc = 0.90, noise = 0.8, tracking = 0.02,
+        tracking_height = 16.0, tracking_scroll = 0.0,
+        chroma_blend = 0.1, chroma_loss = 0.000025, chroma_delay = 0.0, chroma_delay_v = 0.0,
         frame_bounce = 0.006, frame_step = 2.0, breath = 0.04,
         flag = 0.0, generations = 1,
     },
     ["vhs-old"] = {
-        wear = 0.70, dropout = 0.05, grain = 0.050, scratch = 0.3, crease = 0.2,
+        wear = 0.70, dropout = 0.012, grain = 0.050, scratch = 0.3, crease = 0.2,
         doc = 0.9, sparkle = 0.85, chroma_phase = 0.06, wobble = 0.015,
         band = 32.0, life = 64.0, position = 0.0,
-        headswitch = 0.012, wow = 0.0008, flutter = 0.0004,
+        speed = "lp", decode = "comb2",
+        headswitch = 6.0, headswitch_offset = 1.0, headswitch_shift = 0.08,
+        wow = 0.0008, flutter = 0.0004,
         framelock = 0.95, tbc = 0.80, noise = 1.0, tracking = 0.10,
+        tracking_height = 24.0, tracking_scroll = 0.2,
+        chroma_blend = 0.2, chroma_loss = 0.0001, chroma_delay = 5.0, chroma_delay_v = 0.0,
         frame_bounce = 0.008, frame_step = 2.0, breath = 0.06,
         flag = 0.05, generations = 1,
     },
     ["vhs-veryold"] = {
-        wear = 1.20, dropout = 0.10, grain = 0.070, scratch = 0.6, crease = 0.5,
+        wear = 1.20, dropout = 0.025, grain = 0.070, scratch = 0.6, crease = 0.5,
         doc = 0.8, sparkle = 0.9, chroma_phase = 0.10, wobble = 0.025,
         band = 24.0, life = 48.0, position = 0.0,
-        headswitch = 0.018, wow = 0.0015, flutter = 0.0008,
+        speed = "ep", decode = "notch",
+        headswitch = 9.0, headswitch_offset = 1.0, headswitch_shift = 0.12,
+        wow = 0.0015, flutter = 0.0008,
         framelock = 0.85, tbc = 0.65, noise = 1.3, tracking = 0.3,
+        tracking_height = 32.0, tracking_scroll = 0.3,
+        chroma_blend = 0.3, chroma_loss = 0.0003, chroma_delay = 6.0, chroma_delay_v = 1.0,
         frame_bounce = 0.012, frame_step = 2.0, breath = 0.08,
         flag = 0.3, generations = 2,
     },
     ["vhs-dub"] = {
-        wear = 0.15, dropout = 0.01, grain = 0.030, scratch = 0.05, crease = 0.05,
+        wear = 0.15, dropout = 0.0025, grain = 0.030, scratch = 0.05, crease = 0.05,
         doc = 1.0, sparkle = 0.8, chroma_phase = 0.04, wobble = 0.008,
         band = 40.0, life = 80.0, position = 0.0,
-        headswitch = 0.008, wow = 0.0004, flutter = 0.0002,
+        speed = "lp", decode = "2d",
+        headswitch = 4.0, headswitch_offset = 1.0, headswitch_shift = 0.06,
+        wow = 0.0004, flutter = 0.0002,
         framelock = 0.97, tbc = 0.90, noise = 0.8, tracking = 0.0,
+        tracking_height = 16.0, tracking_scroll = 0.0,
+        chroma_blend = 0.2, chroma_loss = 0.00005, chroma_delay = 5.0, chroma_delay_v = 0.0,
         frame_bounce = 0.006, frame_step = 2.0, breath = 0.04,
         flag = 0.0, generations = 3,
     },
     ["vhs-baddeck"] = {
-        wear = 0.06, dropout = 0.004, grain = 0.020, scratch = 0.0, crease = 0.0,
+        wear = 0.06, dropout = 0.001, grain = 0.020, scratch = 0.0, crease = 0.0,
         doc = 1.0, sparkle = 0.8, chroma_phase = 0.025, wobble = 0.006,
         band = 48.0, life = 96.0, position = 0.0,
-        headswitch = 0.02, wow = 0.0015, flutter = 0.0008,
+        speed = "sp", decode = "notch",
+        headswitch = 10.0, headswitch_offset = 2.0, headswitch_shift = 0.15,
+        wow = 0.0015, flutter = 0.0008,
         framelock = 0.50, tbc = 0.20, noise = 1.0, tracking = 0.6,
+        tracking_height = 48.0, tracking_scroll = 0.5,
+        chroma_blend = 0.1, chroma_loss = 0.0001, chroma_delay = 0.0, chroma_delay_v = 0.0,
         frame_bounce = 0.02, frame_step = 2.0, breath = 0.04,
         flag = 0.7, generations = 1,
     },
     ["vhs-damaged"] = {
-        wear = 1.0, dropout = 0.12, grain = 0.060, scratch = 0.8, crease = 0.8,
+        wear = 1.0, dropout = 0.03, grain = 0.060, scratch = 0.8, crease = 0.8,
         doc = 0.7, sparkle = 0.9, chroma_phase = 0.08, wobble = 0.02,
         band = 30.0, life = 70.0, position = 0.0,
-        headswitch = 0.02, wow = 0.001, flutter = 0.0005,
+        speed = "lp", decode = "comb1",
+        headswitch = 10.0, headswitch_offset = 1.0, headswitch_shift = 0.12,
+        wow = 0.001, flutter = 0.0005,
         framelock = 0.70, tbc = 0.60, noise = 1.2, tracking = 0.5,
+        tracking_height = 40.0, tracking_scroll = 0.4,
+        chroma_blend = 0.2, chroma_loss = 0.0003, chroma_delay = 5.0, chroma_delay_v = 1.0,
         frame_bounce = 0.015, frame_step = 2.0, breath = 0.06,
         flag = 0.5, generations = 1,
     },
@@ -203,7 +270,7 @@ end
 -- soft picture, but below the oxide/dropout thresholds. Wear it down with
 -- -wear 1.0 and up.
 local tape_wear = option("wear", preset_value("wear", 0.05 + 0.03 * (tape_seed % 5) / 4.0), 0.0, 2.0)
-local tape_dropout = option("dropout", preset_value("dropout", 0.003 + 0.002 * (tape_seed % 5) / 4.0), 0.0, 0.2)
+local tape_dropout = option("dropout", preset_value("dropout", 0.001 + 0.0005 * (tape_seed % 5) / 4.0), 0.0, 1.0)
 local tape_grain = option("grain", preset_value("grain", 0.018 + 0.006 * (tape_seed % 5) / 4.0), 0.0, 0.3)
 local tape_scratch = option("scratch", preset_value("scratch", 0.0), 0.0, 1.0)
 local tape_crease = option("crease", preset_value("crease", 0.0), 0.0, 1.0)
@@ -219,21 +286,65 @@ local tape_wobble = option("wobble", preset_value("wobble", 0.005 + 0.003 * (tap
 local tape_band = option("band", preset_value("band", 48.0 + 16.0 * tape_rand(11)), 4.0, 160.0)
 local tape_life = option("tape-life", preset_value("life", 96.0 + 64.0 * tape_rand(12)), 4.0, 512.0)
 local tape_position = option("position", preset_value("position", 0.0), 0.0, 65535.0)
+local tape_length = math.floor(option("tape-length", preset_value("tape_length", 3600.0), 240.0, 65536.0))
+
+local tape_deck = option_string("speed", preset_value("speed", "sp"), tape_speeds)
+local tape_speed = tape_speeds[tape_deck]
+
+-- Decode mode numbers must match the #if branches in NTSC_fullDecodeYIQ.
+local decode_names = { notch = 0, comb1 = 1, comb2 = 2, ["2d"] = 3, ["2d-adaptive"] = 4 }
+local decode_name = option_string("decode", preset_value("decode", "2d"), decode_names)
+local decode_mode = decode_names[decode_name]
+
+-- The comb and 2D luma estimators subtract some chroma from the composite.
+-- Put it back so a flat colour keeps the same saturation as the notch decoder.
+local comb_saturation_boost = 1.0
+if decode_name == "comb1" or decode_name == "comb2" then
+    comb_saturation_boost = 1.4
+elseif decode_name == "2d" then
+    comb_saturation_boost = 2.2
+elseif decode_name == "2d-adaptive" then
+    comb_saturation_boost = 1.5
+end
 
 -- Deck condition. Head switch, wow/flutter, frame lock and TBC are the deck's,
--- not the tape's; only the head-to-tape contact is shared. Defaults are a
--- healthy consumer deck: TBC on, frame lock held, only a thin head-switch
--- strip at the bottom.
-local deck_headswitch = option("headswitch", preset_value("headswitch", 0.0045 + 0.0025 * deck_rand(1)), 0.002, 0.04)
+-- not the tape's; only the head-to-tape contact is shared. Head-switch values
+-- are in lines, not in frame fractions.
+local deck_headswitch_height = option("headswitch", preset_value("headswitch", 4.0), 0.0, 24.0)
+local deck_headswitch_offset = option("headswitch-offset", preset_value("headswitch_offset", 1.0), 0.0, 24.0)
+local deck_headswitch_shift = option("headswitch-shift", preset_value("headswitch_shift", 0.05), -0.5, 0.5)
+local deck_headswitch_power = option("headswitch-power", 1.5, 1.0, 4.0)
+local deck_headswitch_jitter = option("headswitch-jitter", 0.002, 0.0, 0.05)
+local deck_headswitch_midline = option("headswitch-midline", 1.0, 0.0, 1.0)
+local deck_headswitch_midline_pos = option("headswitch-midline-pos", 0.8, 0.0, 1.0)
+local deck_headswitch_midline_jitter = option("headswitch-midline-jitter", 0.03, 0.0, 0.2)
 local deck_wow = option("wow", preset_value("wow", 0.0001 + 0.0002 * deck_rand(2)), 0.0, 0.01)
 local deck_flutter = option("flutter", preset_value("flutter", 0.00005 + 0.00008 * deck_rand(3)), 0.0, 0.005)
 local deck_framelock = option("framelock", preset_value("framelock", 0.985 + 0.013 * deck_rand(4)), 0.0, 1.0)
 local deck_tbc = option("tbc", preset_value("tbc", 0.94 + 0.05 * deck_rand(5)), 0.0, 1.0)
 local deck_noise = option("noise", preset_value("noise", 0.55 + 0.25 * deck_rand(6)), 0.0, 2.0)
 local deck_tracking = option("tracking", preset_value("tracking", 0.0), 0.0, 1.0)
+local deck_tracking_height = option("tracking-height", preset_value("tracking_height", 24.0), 0.0, 120.0)
+local deck_tracking_scroll = option("tracking-scroll", preset_value("tracking_scroll", 0.0), 0.0, 1.0)
+local deck_tracking_wave = option("tracking-wave", 15.0, 0.0, 50.0)
+local deck_tracking_snow = option("tracking-snow", 0.025, 0.0, 1.0)
+local deck_tracking_noise = option("tracking-noise", 0.25, 0.0, 1.0)
+local deck_tracking_anisotropy = option("tracking-anisotropy", 0.25, 0.0, 1.0)
 local deck_frame_bounce = option("frame-bounce", preset_value("frame_bounce", 0.004), 0.0, 0.1)
 local deck_frame_step = option("frame-step", preset_value("frame_step", 2.0), 1.0, 12.0)
 local deck_track_phase = deck_rand(13)
+local deck_wow_phase = deck_rand(14)
+local deck_flutter_phase = deck_rand(15)
+
+-- Chroma path.
+local chroma_delay_h = option("chroma-delay-h", preset_value("chroma_delay", 0.0), -32.0, 32.0)
+local chroma_delay_v = option("chroma-delay-v", preset_value("chroma_delay_v", 0.0), -8.0, 8.0)
+local chroma_blend = option("chroma-blend", preset_value("chroma_blend", 0.0), 0.0, 1.0)
+local chroma_loss = option("chroma-loss", preset_value("chroma_loss", 0.0), 0.0, 0.1)
+
+-- FBM grain.
+local grain_frequency = option("grain-frequency", 0.25, 0.01, 1.0)
+local grain_detail = math.floor(option("grain-detail", 2, 1, 5))
 
 -- How many record/playback passes the picture makes. 1 is one deck, 2 is a
 -- single dub. Every pass applies the VHS record bandwidth again, so softness,
@@ -245,6 +356,35 @@ local tape_slant <const> = 2.0 / base_tall
 local tape_breath = option("breath", preset_value("breath", 0.02 + 0.01 * tape_rand(13)), 0.0, 0.1)
 local flag_amount = option("flag", preset_value("flag", 0.0), 0.0, 1.0)
 
+-- Speed-dependent bandwidth. A VHS line is 227.5 subcarrier cycles long and
+-- the line rate is 15734 Hz, so a cutoff in Hz maps to a fixed number of
+-- cycles per line. The pre-band Gaussian gets its sigma from the same number.
+local line_rate <const> = 15734.0
+local luma_cols = math.floor(2.0 * tape_speed.luma / line_rate + 0.5)
+local chroma_cols = math.floor(2.0 * tape_speed.chroma / line_rate + 0.5)
+luma_cols = math.min(math.max(luma_cols, 64), 2048)
+chroma_cols = math.min(math.max(chroma_cols, 8), 512)
+
+local downsample_wide <const> = luma_cols + 3
+local pixel_rate <const> = base_wide * line_rate
+local pre_y_sigma = 0.1874 * pixel_rate / tape_speed.luma
+local pre_iq_sigma = 0.1874 * pixel_rate / tape_speed.chroma
+local pre_y_radius = math.min(12, math.ceil(3.0 * pre_y_sigma))
+local pre_iq_radius = math.min(24, math.ceil(3.0 * pre_iq_sigma / 2.0))
+
+-- Periods for the periodic tape noise. Every tape-coordinate sample has to
+-- wrap at the same track count, otherwise the loop seam is visible. Periods
+-- are fractional; Tape_noisePeriodic handles the partial last cell.
+local function tape_loop_period(divisor)
+    return math.max(1.0, tape_length / math.max(divisor, 1e-6))
+end
+
+local tape_wear_period_1 = tape_loop_period(tape_life)
+local tape_wear_period_2 = tape_loop_period(tape_life * 0.25)
+local tape_wear_period_3 = tape_loop_period(tape_life * 0.0625)
+local tape_scratch_period = tape_loop_period(math.max(4.0, tape_life * 0.25))
+local tape_scrape_period = tape_loop_period(6.0)
+
 -- VHS composite timing. One active line is 227.5 colorburst cycles, and the
 -- encode runs at 2 * base_wide, so the wavelength has to follow the target
 -- width instead of being a magic 3.0 tuned for 1280.
@@ -253,7 +393,8 @@ local colorburst_period <const> = encode_wide / 227.5
 local colorburst_wavelength <const> = colorburst_period / 2.0
 local am_wavelength <const> = math.max(2.0, colorburst_wavelength / 2.0)
 
--- About 3 MHz of luma: 3e6 / 15734 = 190.7 cycles per line.
+-- About 3 MHz of luma: 3e6 / 15734 = 190.7 cycles per line. This is the NTSC
+-- encoder/decoder limit; the tape-speed record limit lives in pre_band.
 local luma_wavelength <const> = encode_wide / (2.0 * (3.0e6 / 15734.0))
 
 local output_level <const> = 0.98 ^ generations
@@ -271,9 +412,11 @@ local color_corrections = {
 local color_correction = color_corrections[generations] or color_corrections[2]
 
 riteg.log_info(string.format(
-    "VHS hop: preset=%s tape=%d deck=%d gen=%d wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f tracking=%.3f headswitch=%.4f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f",
-    preset_name or "new(default)", tape_seed, deck_seed, generations, tape_wear, tape_dropout, tape_grain, tape_band, tape_life, tape_position,
-    deck_tracking, deck_headswitch, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, flag_amount))
+    "VHS hop: preset=%s tape=%d deck=%d gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f",
+    preset_name or "new(default)", tape_seed, deck_seed, generations, tape_deck, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
+    tape_position, tape_length, deck_tracking, deck_tracking_height, deck_tracking_scroll, deck_headswitch_height, deck_headswitch_offset,
+    deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, flag_amount, chroma_delay_h,
+    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency))
 
 -- Define helpers keep the big shader string free of a 40-argument format call.
 local function define(name, value)
@@ -282,6 +425,7 @@ end
 
 local defines = table.concat({
     "#ifndef GEN_ENTROPY\n#define GEN_ENTROPY (0U)\n#endif\n",
+    define("DECODE_MODE", string.format("%d", decode_mode)),
     define("TAPE_SEED", string.format("%dU", tape_seed)),
     define("DECK_SEED", string.format("%dU", deck_seed)),
     define("TAPE_WEAR", string.format("%.6f", tape_wear)),
@@ -299,8 +443,14 @@ local defines = table.concat({
     define("TAPE_ROWS", "480.0"),
     define("TAPE_ROWS_PER_FIELD", "240.0"),
     define("TAPE_TRACKS_PER_FRAME", "2.0"),
+    define("TAPE_LENGTH_TRACKS", string.format("%.4f", tape_length)),
     define("TAPE_BAND_ROWS", string.format("%.4f", tape_band)),
     define("TAPE_LIFE_TRACKS", string.format("%.4f", tape_life)),
+    define("TAPE_WEAR_PERIOD_1", string.format("%.1f", tape_wear_period_1)),
+    define("TAPE_WEAR_PERIOD_2", string.format("%.1f", tape_wear_period_2)),
+    define("TAPE_WEAR_PERIOD_3", string.format("%.1f", tape_wear_period_3)),
+    define("TAPE_SCRATCH_PERIOD", string.format("%.1f", tape_scratch_period)),
+    define("TAPE_SCRAPE_PERIOD", string.format("%.1f", tape_scrape_period)),
     define("TAPE_POSITION", string.format("%.4f", tape_position)),
     define("TAPE_FLOOR", "0.01"),
     define("TAPE_DROPOUT_BASE", "0.0002"),
@@ -311,7 +461,14 @@ local defines = table.concat({
     define("TAPE_CREASE_ANGLE", string.format("%.5f", 0.10 + 0.15 * tape_rand(8))),
     define("TAPE_CREASE_POS", string.format("%.5f", 0.25 + 0.5 * tape_rand(9))),
     define("TAPE_CREASE_SHIFT", "0.012"),
-    define("DECK_HEADSWITCH", string.format("%.6f", deck_headswitch)),
+    define("DECK_HEADSWITCH_HEIGHT", string.format("%.4f", deck_headswitch_height)),
+    define("DECK_HEADSWITCH_OFFSET", string.format("%.4f", deck_headswitch_offset)),
+    define("DECK_HEADSWITCH_SHIFT", string.format("%.6f", deck_headswitch_shift)),
+    define("DECK_HEADSWITCH_POWER", string.format("%.4f", deck_headswitch_power)),
+    define("DECK_HEADSWITCH_JITTER", string.format("%.6f", deck_headswitch_jitter)),
+    define("DECK_HEADSWITCH_MIDLINE", string.format("%.1f", deck_headswitch_midline)),
+    define("DECK_HEADSWITCH_MIDLINE_POS", string.format("%.5f", deck_headswitch_midline_pos)),
+    define("DECK_HEADSWITCH_MIDLINE_JITTER", string.format("%.5f", deck_headswitch_midline_jitter)),
     define("DECK_WOW", string.format("%.6f", deck_wow)),
     define("DECK_FLUTTER", string.format("%.6f", deck_flutter)),
     define("DECK_FRAMELOCK", string.format("%.6f", deck_framelock)),
@@ -320,9 +477,29 @@ local defines = table.concat({
     define("DECK_TBC", string.format("%.6f", deck_tbc)),
     define("DECK_NOISE", string.format("%.6f", deck_noise)),
     define("DECK_TRACKING", string.format("%.6f", deck_tracking)),
+    define("DECK_TRACKING_HEIGHT", string.format("%.3f", deck_tracking_height)),
+    define("DECK_TRACKING_SCROLL", string.format("%.5f", deck_tracking_scroll)),
+    define("DECK_TRACKING_WAVE", string.format("%.5f", deck_tracking_wave)),
+    define("DECK_TRACKING_SNOW", string.format("%.6f", deck_tracking_snow)),
+    define("DECK_TRACKING_NOISE", string.format("%.5f", deck_tracking_noise)),
+    define("DECK_TRACKING_ANISOTROPY", string.format("%.5f", deck_tracking_anisotropy)),
     define("DECK_TRACK_PHASE", string.format("%.6f", deck_track_phase)),
+    define("DECK_WOW_PHASE", string.format("%.6f", deck_wow_phase)),
+    define("DECK_FLUTTER_PHASE", string.format("%.6f", deck_flutter_phase)),
+    define("CHROMA_DELAY_H", string.format("%.4f", chroma_delay_h)),
+    define("CHROMA_DELAY_V", string.format("%.4f", chroma_delay_v)),
+    define("CHROMA_BLEND", string.format("%.6f", chroma_blend)),
+    define("CHROMA_LOSS", string.format("%.6f", chroma_loss)),
+    define("GRAIN_FREQUENCY", string.format("%.5f", grain_frequency)),
+    define("GRAIN_DETAIL", string.format("%d", grain_detail)),
     define("DECODE_WINDOW_WIDTH", "16"),
+    define("COMB_DECODE_WINDOW_WIDTH", "5"),
+    define("COMB_SATURATION_BOOST", string.format("%.3f", comb_saturation_boost)),
     define("ENCODE_WINDOW_WIDTH", "8"),
+    define("PRE_BAND_Y_SIGMA", string.format("%.6f", pre_y_sigma)),
+    define("PRE_BAND_IQ_SIGMA", string.format("%.6f", pre_iq_sigma)),
+    define("PRE_BAND_Y_RADIUS", string.format("%d", pre_y_radius)),
+    define("PRE_BAND_IQ_RADIUS", string.format("%d", pre_iq_radius)),
     define("AM_CARRIERSIGNAL_WAVELENGTH", string.format("%.6f", am_wavelength)),
     define("AM_DECODE_HIGHPASS_WAVELENGTH", string.format("%.6f", am_wavelength)),
     define("AM_DEMODULATE_WAVELENGTH", string.format("%.6f", am_wavelength)),
@@ -337,9 +514,9 @@ local defines = table.concat({
     define("SATURATION", "4.0"),
     define("WINDOW_BIAS", "0.0"),
     define("VHS_DROPOUT_BLUR_STEPS", "64"),
-    define("VHS_DROPOUT_MIN_STEPS", "32"),
-    define("VHS_MAXRES_Y", "vec2(333.0, 480.0)"),
-    define("VHS_MAXRES_IQ", "vec2(40.0, 480.0)"),
+    define("VHS_DROPOUT_MIN_STEPS", "0"),
+    define("VHS_MAXRES_Y", string.format("vec2(%.1f, 480.0)", luma_cols)),
+    define("VHS_MAXRES_IQ", string.format("vec2(%.1f, 480.0)", chroma_cols)),
     define("VHS_BLUR_AMT", "vec2(0.2, 0.2)"),
     -- Artistic contrast control, not the VHS/CRT transfer: the signal is
     -- expanded before the composite chain and compressed at the end.
@@ -364,17 +541,16 @@ local common_glsl <const> = defines .. [[
         return uint(uint(uv.x) * 1973U + uint(uv.y) * 9277U + entropy * 34961U + seed * 41077U) | 1U;
     }
 
-    // Tape defects are the same on every frame; only the track index picks
-    // which of them is under the head, and that is the frame number.
-    uint Common_tapeRng(vec2 uv, uint entropy)
+    float Common_field(vec2 uv)
     {
-        return Common_hashState(uv, entropy, TAPE_SEED);
+        return mod(floor(uv.y * TAPE_ROWS), 2.0);
     }
 
     uint Common_newRngStateEx(vec2 uv, uint entropy)
     {
         return uint(uint(uv.x) * 1973U + uint(uv.y) * 9277U + uint(iFrame) * 26699U
-            + entropy * 34961U + GEN_ENTROPY * 104729U + DECK_SEED * 41077U) | 1U;
+            + entropy * 34961U + GEN_ENTROPY * 104729U + DECK_SEED * 41077U
+            + uint(Common_field(uv)) * 15485863U) | 1U;
     }
 
     uint Common_newRngState(vec2 uv)
@@ -398,26 +574,95 @@ local common_glsl <const> = defines .. [[
         return float(Common_wangHash(state)) / 4294967296.0;
     }
 
-    float Tape_corner(vec2 cell, uint salt)
+    float Common_corner(vec2 cell, uint salt, uint seed)
     {
-        uint state = Common_tapeRng(cell, salt);
+        uint state = Common_hashState(cell, salt, seed);
         return Common_randomFloat(state);
     }
 
-    // 2D value noise in (along the track, track index). The two axes have
-    // very different scales on purpose: that is what makes a defect a band.
-    float Tape_noise(vec2 p, uint salt)
+    // 2D value noise with an explicit seed. Tape defects use TAPE_SEED, deck
+    // instabilities use DECK_SEED; keeping the two apart is what makes -tape
+    // and -deck independent.
+    float Common_noise(vec2 p, uint salt, uint seed)
     {
         vec2 i = floor(p);
         vec2 f = fract(p);
         f = f * f * (3.0 - 2.0 * f);
 
-        float c00 = Tape_corner(i + vec2(0.0, 0.0), salt);
-        float c10 = Tape_corner(i + vec2(1.0, 0.0), salt);
-        float c01 = Tape_corner(i + vec2(0.0, 1.0), salt);
-        float c11 = Tape_corner(i + vec2(1.0, 1.0), salt);
+        float c00 = Common_corner(i + vec2(0.0, 0.0), salt, seed);
+        float c10 = Common_corner(i + vec2(1.0, 0.0), salt, seed);
+        float c01 = Common_corner(i + vec2(0.0, 1.0), salt, seed);
+        float c11 = Common_corner(i + vec2(1.0, 1.0), salt, seed);
 
         return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+    }
+
+    float Deck_noise(vec2 p, uint salt)
+    {
+        return Common_noise(p, salt, DECK_SEED);
+    }
+
+    // Periodic-in-track variant. periodY is a number of noise cells (it may
+    // be fractional); the track coordinate wraps at the same period, so the
+    // tape loop has no visible seam.
+    float Tape_noisePeriodic(vec2 p, uint salt, float periodY)
+    {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f.x = f.x * f.x * (3.0 - 2.0 * f.x);
+
+        float period = max(periodY, 1.0);
+        float y0 = mod(i.y, period);
+        float y1 = mod(i.y + 1.0, period);
+
+        // The last cell before the wrap is usually partial. Interpolate over
+        // its real width, otherwise the loop seam lands halfway between two
+        // noise cells and the whole tape pattern jumps.
+        float cellEnd = min(i.y + 1.0, period);
+        float fy = (p.y - i.y) / max(cellEnd - i.y, 1e-6);
+        fy = fy * fy * (3.0 - 2.0 * fy);
+
+        float c00 = Common_corner(vec2(i.x, y0), salt, TAPE_SEED);
+        float c10 = Common_corner(vec2(i.x + 1.0, y0), salt, TAPE_SEED);
+        float c01 = Common_corner(vec2(i.x, y1), salt, TAPE_SEED);
+        float c11 = Common_corner(vec2(i.x + 1.0, y1), salt, TAPE_SEED);
+
+        return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), fy);
+    }
+
+    // Screen-space value noise and FBM, used for the grain. This is not tape
+    // noise: it changes every frame and is not tied to the tape coordinates.
+    float Common_valueNoise(vec2 p, uint seed)
+    {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+
+        float c00 = Common_corner(i + vec2(0.0, 0.0), 0U, seed);
+        float c10 = Common_corner(i + vec2(1.0, 0.0), 0U, seed);
+        float c01 = Common_corner(i + vec2(0.0, 1.0), 0U, seed);
+        float c11 = Common_corner(i + vec2(1.0, 1.0), 0U, seed);
+
+        return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+    }
+
+    float Common_fbm(vec2 p, uint seed, int detail, float gain)
+    {
+        float sum = 0.0;
+        float amp = 1.0;
+        float norm = 0.0;
+
+        for (int octave = 0; octave < 5; ++octave) {
+            if (octave >= detail)
+                break;
+
+            sum += amp * Common_valueNoise(p, seed + uint(octave) * 1013U);
+            norm += amp;
+            p *= 2.0;
+            amp *= gain;
+        }
+
+        return sum / max(norm, 1e-4);
     }
 
     // ---- Tape coordinates -------------------------------------------------
@@ -438,13 +683,22 @@ local common_glsl <const> = defines .. [[
 
     float Tape_track(vec2 uv)
     {
-        return iFrame * TAPE_TRACKS_PER_FRAME + Tape_field(uv) + TAPE_POSITION;
+        return mod(iFrame * TAPE_TRACKS_PER_FRAME + Tape_field(uv) + TAPE_POSITION, TAPE_LENGTH_TRACKS);
     }
 
     // 0..1 along one field track. A constant value is a horizontal band.
     float Tape_along(vec2 uv)
     {
         return (floor(uv.y * TAPE_ROWS_PER_FIELD) + 0.5) / TAPE_ROWS_PER_FIELD;
+    }
+
+    // The subcarrier phase advances by half a cycle per field line. Frame rows
+    // alternate fields, so the phase must be based on the field line, not on
+    // uv.y * TAPE_ROWS; otherwise a comb filter would average same-phase chroma.
+    float Tape_linePhase(vec2 uv)
+    {
+        float fieldLine = floor(uv.y * TAPE_ROWS_PER_FIELD);
+        return mod(fieldLine + Common_field(uv), 2.0) * PI;
     }
 
     // Wear as a function of the tape, not of the frame. Each octave has its
@@ -455,9 +709,9 @@ local common_glsl <const> = defines .. [[
         float along = Tape_along(uv) + TAPE_SLANT * uv.x;
         float track = Tape_track(uv);
 
-        float n = 0.55 * Tape_noise(vec2(along * (TAPE_ROWS_PER_FIELD / TAPE_BAND_ROWS), track / TAPE_LIFE_TRACKS), 20U)
-                + 0.30 * Tape_noise(vec2(along * (TAPE_ROWS_PER_FIELD / (TAPE_BAND_ROWS * 0.25)), track / (TAPE_LIFE_TRACKS * 0.25)), 21U)
-                + 0.15 * Tape_noise(vec2(along * (TAPE_ROWS_PER_FIELD / (TAPE_BAND_ROWS * 0.0625)), track / (TAPE_LIFE_TRACKS * 0.0625)), 22U);
+        float n = 0.55 * Tape_noisePeriodic(vec2(along * (TAPE_ROWS_PER_FIELD / TAPE_BAND_ROWS), track / TAPE_LIFE_TRACKS), 20U, TAPE_WEAR_PERIOD_1)
+                + 0.30 * Tape_noisePeriodic(vec2(along * (TAPE_ROWS_PER_FIELD / (TAPE_BAND_ROWS * 0.25)), track / (TAPE_LIFE_TRACKS * 0.25)), 21U, TAPE_WEAR_PERIOD_2)
+                + 0.15 * Tape_noisePeriodic(vec2(along * (TAPE_ROWS_PER_FIELD / (TAPE_BAND_ROWS * 0.0625)), track / (TAPE_LIFE_TRACKS * 0.0625)), 22U, TAPE_WEAR_PERIOD_3);
 
         float floorWear = TAPE_FLOOR * step(0.005, TAPE_WEAR);
         return clamp(TAPE_WEAR * smoothstep(0.52, 0.76, n) + floorWear, 0.0, 1.0);
@@ -481,9 +735,9 @@ local common_glsl <const> = defines .. [[
         float track = Tape_track(uv);
         float t = float(iFrame) / 30.0;
 
-        float wow = sin(t * 6.2831853 * 0.73 + TAPE_POSITION * 0.37) * DECK_WOW;
-        float flutter = sin(t * 6.2831853 * 6.1 + along * 47.0) * DECK_FLUTTER;
-        float scrape = (2.0 * Tape_noise(vec2(along * 120.0, track / 6.0), 30U) - 1.0) * TAPE_WOBBLE * wear;
+        float wow = sin(t * 6.2831853 * 0.73 + DECK_WOW_PHASE * 6.2831853) * DECK_WOW;
+        float flutter = sin(t * 6.2831853 * 6.1 + DECK_FLUTTER_PHASE * 6.2831853 + along * 47.0) * DECK_FLUTTER;
+        float scrape = (2.0 * Tape_noisePeriodic(vec2(along * 120.0, track / 6.0), 30U, TAPE_SCRAPE_PERIOD) - 1.0) * TAPE_WOBBLE * wear;
         float crease = Tape_crease(uv) * TAPE_CREASE_SHIFT;
 
         return (wow + flutter + scrape + crease) * (1.0 - DECK_TBC);
@@ -494,8 +748,8 @@ local common_glsl <const> = defines .. [[
     // the field phase does.
     float Tape_frameOffset()
     {
-        float slow = 2.0 * Tape_noise(vec2(float(iFrame) / 72.0, 0.5), 70U) - 1.0;
-        float fast = 2.0 * Tape_noise(vec2(float(iFrame) / 12.0, 0.5), 71U) - 1.0;
+        float slow = 2.0 * Deck_noise(vec2(float(iFrame) / 72.0, 0.5), 70U) - 1.0;
+        float fast = 2.0 * Deck_noise(vec2(float(iFrame) / 12.0, 0.5), 71U) - 1.0;
         float amount = (1.0 - DECK_FRAMELOCK) * DECK_FRAME_BOUNCE;
         float bounce = (0.6 * slow + 0.4 * fast) * amount;
         return floor(bounce * TAPE_ROWS / DECK_FRAME_STEP + 0.5) * DECK_FRAME_STEP / TAPE_ROWS;
@@ -505,7 +759,7 @@ local common_glsl <const> = defines .. [[
     // gains and loses level. One slow noise, so it is global and smooth.
     float Tape_breath()
     {
-        float n = Tape_noise(vec2(float(iFrame) / 72.0, 0.5), 60U);
+        float n = Deck_noise(vec2(float(iFrame) / 72.0, 0.5), 60U);
         return 2.0 * n - 1.0;
     }
 
@@ -517,32 +771,20 @@ local common_glsl <const> = defines .. [[
         float row = floor(uv.y * TAPE_ROWS_PER_FIELD);
         float track = Tape_track(uv);
 
-        uint posState = Common_tapeRng(vec2(0.0, row), 50U);
-        float pos = Common_randomFloat(posState);
+        float pos = Common_corner(vec2(0.0, row), 50U, TAPE_SEED);
         float rate = 0.02 * TAPE_SCRATCH * clamp(TAPE_WEAR, 0.0, 1.0);
         float canScratch = step(1.0 - rate, pos);
 
-        float severity = Tape_noise(vec2(row * 0.7, track / max(4.0, TAPE_LIFE_TRACKS * 0.25)), 51U);
+        float severity = Tape_noisePeriodic(vec2(row * 0.7, track / max(4.0, TAPE_LIFE_TRACKS * 0.25)), 51U, TAPE_SCRATCH_PERIOD);
         return canScratch * smoothstep(0.35, 0.65, severity);
-    }
-
-    // A dropout is a hole in the oxide. The hole map lives in tape
-    // coordinates: fixed along the line and correlated across a few tracks,
-    // so the same hole is read again for as long as its tracks come around.
-    // The snow inside it is fresh every frame, but the hole itself is not.
-    float Tape_holes(vec2 uv)
-    {
-        vec2 cell = vec2(floor(uv.x * 256.0), floor(uv.y * TAPE_ROWS_PER_FIELD));
-        float track = Tape_track(uv);
-        return Tape_noise(vec2(cell.x + cell.y * 257.0, track / 4.0), 90U);
     }
 
     // A mistracked deck reads the guard band instead of the track: a wide
     // horizontal band of noise and lost colour that scrolls through the
     // picture. 0 is perfect tracking, 1 is a completely lost servo.
-    float Tape_trackingBand(vec2 uv)
+    float Tape_scrollTracking(vec2 uv)
     {
-        float amount = clamp(DECK_TRACKING, 0.0, 1.0);
+        float amount = clamp(DECK_TRACKING, 0.0, 1.0) * DECK_TRACKING_SCROLL;
         if(amount <= 0.0)
             return 0.0;
 
@@ -550,6 +792,60 @@ local common_glsl <const> = defines .. [[
         float d = abs(uv.y - y);
         d = min(d, 1.0 - d);
         return smoothstep(TAPE_TRACKING_WIDTH, 0.0, d) * amount;
+    }
+
+    // A head that is not tracking well loses the bottom of the picture first.
+    // This band is anchored to the bottom and fades upwards over
+    // DECK_TRACKING_HEIGHT lines.
+    float Tape_headTracking(vec2 uv)
+    {
+        if(DECK_TRACKING_HEIGHT <= 0.0)
+            return 0.0;
+
+        float height = max(DECK_TRACKING_HEIGHT / TAPE_ROWS, 1e-4);
+        float t = clamp(uv.y / height, 0.0, 1.0);
+        return pow(1.0 - t, 2.0) * clamp(DECK_TRACKING, 0.0, 1.0);
+    }
+
+    float Tape_tracking(vec2 uv)
+    {
+        return max(Tape_scrollTracking(uv), Tape_headTracking(uv));
+    }
+
+    // Transient snow. Instead of turning each pixel into an independent
+    // random value, place short runs along the line and evaluate the wave
+    // envelope at the current pixel. This is the GPU version of the
+    // geometric-distribution snow generator in ntsc-rs.
+    float Snow_transient(vec2 uv, uint salt, float intensity, float anisotropy)
+    {
+        float px = uv.x * iResolution.x;
+        float row = floor(uv.y * TAPE_ROWS);
+        uint rowState = Common_newRngStateEx(vec2(0.0, row), salt);
+        float r = Common_randomFloat(rowState);
+        float lineIntensity = mix(clamp(intensity, 0.0, 1.0), step(r, clamp(intensity, 0.0, 1.0)), clamp(anisotropy, 0.0, 1.0));
+
+        if(lineIntensity <= 0.0)
+            return 0.0;
+
+        const float cellSize = 64.0;
+        float cell = floor(px / cellSize);
+        float result = 0.0;
+
+        for(int k = -1; k <= 0; ++k) {
+            float c = max(cell + float(k), 0.0);
+            uint s = Common_newRngStateEx(vec2(c, row), salt + 1U);
+            float start = (c + Common_randomFloat(s)) * cellSize;
+            float len = mix(8.0, 64.0, Common_randomFloat(s));
+            float amp = Common_randomFloat(s) * 2.0 - 1.0;
+            float x = px - start;
+
+            if(x >= 0.0 && x < len) {
+                float freq = mix(len * 3.0, len * 5.0, Common_randomFloat(s));
+                result += amp * pow(1.0 - x / len, 2.0) * cos(x * PI / freq);
+            }
+        }
+
+        return result * lineIntensity;
     }
 
     float NTSC_sinc(float x)
@@ -587,7 +883,7 @@ local common_glsl <const> = defines .. [[
             yiq.z += yiqSample.z * sincQ * window;
         }
 
-        float phase = uv.x * PI / (COLORBURST_WAVELENGTH_ENCODER * pixelWidth);
+        float phase = uv.x * PI / (COLORBURST_WAVELENGTH_ENCODER * pixelWidth) + Tape_linePhase(uv);
         float phaseAM = uv.x * PI / (AM_CARRIERSIGNAL_WAVELENGTH * pixelWidth);
         return sin(phaseAM) * (yiq.x + yiq.y * sin(phase) + yiq.z * cos(phase));
     }
@@ -611,13 +907,78 @@ local common_glsl <const> = defines .. [[
         return decoded * sin(phaseAM) * 4.0;
     }
 
-    vec3 NTSC_fullDecodeYIQ(sampler2D sampler, in vec2 uv, in float pixelWidth, uint rngRow, float tapeWear)
+    // Luma estimate for a 1-line comb. The previous field line is two frame
+    // rows away; its subcarrier phase is inverted by Tape_linePhase.
+    float NTSC_lumaComb1(sampler2D sampler, vec2 uv, float pixelHeight)
+    {
+        float yPrev = clamp(uv.y + 2.0 * pixelHeight, 0.5 * pixelHeight, 1.0 - 0.5 * pixelHeight);
+        return (texture(sampler, uv).x + texture(sampler, vec2(uv.x, yPrev)).x) * 0.5;
+    }
+
+    // Luma estimate for a 2-line comb.
+    float NTSC_lumaComb2(sampler2D sampler, vec2 uv, float pixelHeight)
+    {
+        float yPrev = clamp(uv.y + 2.0 * pixelHeight, 0.5 * pixelHeight, 1.0 - 0.5 * pixelHeight);
+        float yNext = clamp(uv.y - 2.0 * pixelHeight, 0.5 * pixelHeight, 1.0 - 0.5 * pixelHeight);
+        return texture(sampler, uv).x * 0.5
+            + texture(sampler, vec2(uv.x, yPrev)).x * 0.25
+            + texture(sampler, vec2(uv.x, yNext)).x * 0.25;
+    }
+
+    // 5x3 luma estimate on the composite signal. Fixed weights are the digital
+    // 2D filter from ntsc-rs; DECODE_MODE 4 turns them into gradient weights.
+    float NTSC_luma2D(sampler2D sampler, vec2 uv, float xStep, float pixelHeight)
+    {
+        float yPrev = clamp(uv.y + 2.0 * pixelHeight, 0.5 * pixelHeight, 1.0 - 0.5 * pixelHeight);
+        float yNext = clamp(uv.y - 2.0 * pixelHeight, 0.5 * pixelHeight, 1.0 - 0.5 * pixelHeight);
+
+        float tl = texture(sampler, vec2(uv.x - xStep, yPrev)).x;
+        float t = texture(sampler, vec2(uv.x, yPrev)).x;
+        float tr = texture(sampler, vec2(uv.x + xStep, yPrev)).x;
+        float l = texture(sampler, vec2(uv.x - xStep, uv.y)).x;
+        float c = texture(sampler, uv).x;
+        float r = texture(sampler, vec2(uv.x + xStep, uv.y)).x;
+        float bl = texture(sampler, vec2(uv.x - xStep, yNext)).x;
+        float b = texture(sampler, vec2(uv.x, yNext)).x;
+        float br = texture(sampler, vec2(uv.x + xStep, yNext)).x;
+
+        const float THRESHOLD = 1e-3;
+        const float DIAG_LIMIT = 2.0;
+
+#if DECODE_MODE == 4
+        float g_x = (tr - tl) + (r - l) + (br - bl);
+        float g_y = (bl - tl) + (b - t) + (br - tr);
+
+        float gx_t = g_x / THRESHOLD;
+        float gy_t = g_y / THRESHOLD;
+        float gd1_t = (g_x + g_y) / (THRESHOLD * 1.41421356);
+        float gd2_t = (g_x - g_y) / (THRESHOLD * 1.41421356);
+
+        float a_x = 1.0 / (1.0 + gx_t * gx_t);
+        float a_y = 1.0 / (1.0 + gy_t * gy_t);
+        float norm = 0.25 / (a_x + a_y);
+
+        float wx = a_x * norm;
+        float wy = a_y * norm;
+        float wd1 = norm / max(1.0 + gd1_t * gd1_t, DIAG_LIMIT / (THRESHOLD * THRESHOLD));
+        float wd2 = norm / max(1.0 + gd2_t * gd2_t, DIAG_LIMIT / (THRESHOLD * THRESHOLD));
+        float w_center = 0.5 + 2.0 * (wd1 + wd2);
+
+        return c * w_center + (l + r) * wx + (t + b) * wy - (tl + br) * wd1 - (tr + bl) * wd2;
+#else
+        return c * 0.75 + (l + r + t + b) * 0.125 - (tl + tr + bl + br) * 0.0625;
+#endif
+    }
+
+    vec3 NTSC_fullDecodeYIQ(sampler2D sampler, in vec2 uv, in vec2 pixelSize, uint rngRow, float tapeWear)
     {
         uint seed = rngRow;
         vec2 originalUV = uv;
+        float pixelWidth = pixelSize.x * NTSC_SCALE;
+        float pixelHeight = pixelSize.y;
 
-        // Per-line chroma phase error. The encoder and decoder now use the
-        // same reference phase, so this is a real error rather than the old
+        // Per-line chroma phase error. The encoder and decoder use the same
+        // reference phase, so this is a real error rather than the old
         // per-line PI that cancelled itself out.
         float phaseNoise = Common_randomFloat(seed) * 2.0 - 1.0;
         phaseNoise *= TAPE_CHROMA_PHASE * (0.15 + 0.85 * clamp(tapeWear, 0.0, 1.0));
@@ -626,6 +987,7 @@ local common_glsl <const> = defines .. [[
         float frequencyNoise = Common_randomFloat(seed) * 2.0 - 1.0;
         frequencyNoise *= TAPE_CHROMA_PHASE * 0.02 * clamp(tapeWear, 0.0, 1.0);
 
+#if DECODE_MODE == 0
         vec3 yiq = vec3(0.0);
         float windowWeight = 0.0;
 
@@ -633,22 +995,61 @@ local common_glsl <const> = defines .. [[
             float window = NTSC_cosineWindow(float(i) / float(DECODE_WINDOW_WIDTH + 1));
             vec2 uvWithOffset = vec2(uv.x + float(i) * pixelWidth, uv.y);
             vec2 originalUVWithOffset = vec2(originalUV.x + float(i) * pixelWidth, originalUV.y);
-            float phase = originalUVWithOffset.x * PI / ((COLORBURST_WAVELENGTH_DECODER + frequencyNoise) * pixelWidth) + phaseNoise;
+            float phase = originalUVWithOffset.x * PI / ((COLORBURST_WAVELENGTH_DECODER + frequencyNoise) * pixelWidth)
+                + Tape_linePhase(originalUVWithOffset) + phaseNoise;
 
             float sincY = NTSC_sinc(float(i) / DECODE_LOWPASS_WAVELENGTH) / DECODE_LOWPASS_WAVELENGTH;
-            float sinI = sin(phase);
-            float sinQ = cos(phase);
-
             float encodedSample = texture(sampler, uvWithOffset).x;
+
             yiq.x += encodedSample * sincY * window;
-            yiq.y += encodedSample * sinI * window;
-            yiq.z += encodedSample * sinQ * window;
+            yiq.y += encodedSample * sin(phase) * window;
+            yiq.z += encodedSample * cos(phase) * window;
             windowWeight += window;
         }
 
         yiq.yz *= SATURATION / windowWeight;
-
         return yiq;
+#else
+        float xStep = 2.0 * pixelWidth;
+        float lumaCenter;
+
+#if DECODE_MODE == 1
+        lumaCenter = NTSC_lumaComb1(sampler, uv, pixelHeight);
+#elif DECODE_MODE == 2
+        lumaCenter = NTSC_lumaComb2(sampler, uv, pixelHeight);
+#else
+        lumaCenter = NTSC_luma2D(sampler, uv, xStep, pixelHeight);
+#endif
+
+        vec2 iq = vec2(0.0);
+        float weightSum = 0.0;
+
+        for(int i = -COMB_DECODE_WINDOW_WIDTH; i <= COMB_DECODE_WINDOW_WIDTH; ++i) {
+            float weight = NTSC_cosineWindow(float(i) / float(COMB_DECODE_WINDOW_WIDTH + 1));
+            vec2 uvWithOffset = vec2(uv.x + float(i) * pixelWidth, uv.y);
+            float encodedSample = texture(sampler, uvWithOffset).x;
+            float lumaAt;
+
+#if DECODE_MODE == 1
+            lumaAt = NTSC_lumaComb1(sampler, uvWithOffset, pixelHeight);
+#elif DECODE_MODE == 2
+            lumaAt = NTSC_lumaComb2(sampler, uvWithOffset, pixelHeight);
+#else
+            lumaAt = NTSC_luma2D(sampler, uvWithOffset, xStep, pixelHeight);
+#endif
+
+            float phase = uvWithOffset.x * PI / (COLORBURST_WAVELENGTH_DECODER * pixelWidth)
+                + Tape_linePhase(uvWithOffset) + phaseNoise;
+            float chroma = encodedSample - lumaAt;
+
+            iq.x += chroma * sin(phase) * weight;
+            iq.y += chroma * cos(phase) * weight;
+            weightSum += weight;
+        }
+
+        iq *= SATURATION * COMB_SATURATION_BOOST / weightSum;
+        return vec3(lumaCenter, iq);
+#endif
     }
 
     vec4 VHS_cubic(float v)
@@ -731,10 +1132,9 @@ local gamma_correct_src <const> = common_glsl .. [[
 ]]
 
 -- The record-side bandwidth limit. This is where VHS loses detail: the tape
--- cannot carry more than about 3 MHz of luma and a fraction of a megahertz of
--- chroma. Applying it before the composite encoder means the cross-colour and
--- ringing are generated inside the VHS band, not at the full 2x width and then
--- blurred away. The playback limit is the 333/40 downsample later.
+-- cannot carry the full source bandwidth. Sigma and loop radius come from the
+-- selected tape speed (SP/LP/EP); the playback limit is the luma/chroma column
+-- downsample later.
 local pre_band_src <const> = common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
@@ -743,9 +1143,9 @@ local pre_band_src <const> = common_glsl .. [[
 
         float y = 0.0;
         float wySum = 0.0;
-        for (int i = -8; i <= 8; ++i) {
+        for (int i = -PRE_BAND_Y_RADIUS; i <= PRE_BAND_Y_RADIUS; ++i) {
             float x = float(i);
-            float wy = exp(-0.5 * (x / 2.0) * (x / 2.0));
+            float wy = exp(-0.5 * (x / PRE_BAND_Y_SIGMA) * (x / PRE_BAND_Y_SIGMA));
             vec3 s = texture(iChannel0, uv + vec2(x * px.x, 0.0)).rgb * RGB_TO_YIQ;
             y += s.x * wy;
             wySum += wy;
@@ -754,9 +1154,9 @@ local pre_band_src <const> = common_glsl .. [[
 
         vec2 iq = vec2(0.0);
         float wiSum = 0.0;
-        for (int i = -16; i <= 16; ++i) {
+        for (int i = -PRE_BAND_IQ_RADIUS; i <= PRE_BAND_IQ_RADIUS; ++i) {
             float x = float(i) * 2.0;
-            float wi = exp(-0.5 * (x / 10.0) * (x / 10.0));
+            float wi = exp(-0.5 * (x / PRE_BAND_IQ_SIGMA) * (x / PRE_BAND_IQ_SIGMA));
             vec3 s = texture(iChannel0, uv + vec2(x * px.x, 0.0)).rgb * RGB_TO_YIQ;
             iq += s.yz * wi;
             wiSum += wi;
@@ -801,7 +1201,7 @@ local function ntsc_encode_src(gen, tape_gain)
             float encoded = NTSC_fullEncode(iChannel0, uv, pixelSize.x * NTSC_SCALE);
 
             float snowNoise = Common_randomFloat(rngState) - 0.5;
-            float sineNoise = sin(uv.x * 200.0 + uv.y * -50.0 + fract(iTime * iTime) * 3.1415927 * 2.0) * 0.065;
+            float sineNoise = sin(uv.x * 200.0 + uv.y * -50.0 + fract(float(iFrame) * 0.37) * 3.1415927 * 2.0) * 0.065;
             float saltPepperNoise = Common_randomFloat(rngState) * 2.0 - 1.0;
 
             saltPepperNoise = sign(saltPepperNoise) * pow(abs(saltPepperNoise), 200.0) * 10.0;
@@ -844,14 +1244,15 @@ local function ntsc_decode_iq_src(gen)
 
             uint rngStateRow = Common_newRngState(vec2(0.0, fragCoord.y));
 
-            fragColor.xyz = NTSC_fullDecodeYIQ(iChannel0, uv, pixelSize.x * NTSC_SCALE, rngStateRow, wear);
+            fragColor.xyz = NTSC_fullDecodeYIQ(iChannel0, uv, pixelSize, rngStateRow, wear);
             fragColor.w = 1.0;
         }
     ]]
 end
 
--- Repack the final YIQ into the two VHS playback bandwidths. The downsample
--- also does the 2:1 decimation from the 2x composite width to the base width.
+-- Repack the final YIQ into the two VHS playback bandwidths. The target width
+-- is the number of samples needed for the selected tape speed's luma cutoff,
+-- not a fixed fraction of the 2x composite width.
 local vhs_downsample_src <const> = common_glsl .. [[
     vec3 downsampleVideo(vec2 uv, vec2 pixelSize, ivec2 samples)
     {
@@ -936,10 +1337,11 @@ local tape_mask = make_pass(common_glsl .. [[
 ]], 32, base_tall, nil, { format = "rg16f", filter = "linear" })
 
 -- Dropouts are a loss of signal over a finite time, i.e. over a run of
--- pixels along the raster, not over one pixel. The hole map is in tape
--- coordinates, so a hole recurs while its tracks are being read; only the
--- snow that fills it is new every frame. `Tape_scratch` and the tracking band
--- raise the threshold at their lines instead of growing a second generator.
+-- pixels along the raster, not over one pixel. The mask is a fresh set of
+-- sparse impulses every frame; the blur below turns each impulse into a
+-- bright head and a decaying tail, like V8's snow. `Tape_scratch` and the
+-- tracking band raise the threshold at their lines instead of growing a
+-- second generator.
 local vhs_dropout = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
@@ -948,21 +1350,25 @@ local vhs_dropout = make_pass(common_glsl .. [[
 
         vec2 cell = vec2(floor(uv.x * 256.0), floor(uv.y * TAPE_ROWS_PER_FIELD));
 
+        // Keep the non-uniform V9 density: dropout clusters follow the tape
+        // wear field and the bottom of the frame, instead of becoming a flat
+        // V8-style static layer.
         float density = TAPE_DROPOUT * smoothstep(0.25, 0.80, wear) * (0.4 + 0.6 * (1.0 - uv.y));
         float baseDropout = TAPE_DROPOUT * (TAPE_DROPOUT_BASE
             + TAPE_DROPOUT_WEAR * smoothstep(0.30, 1.0, TAPE_WEAR))
             * step(0.005, TAPE_WEAR) * DECK_NOISE;
         density = max(density, baseDropout);
         density = max(density, Tape_scratch(uv));
-        density = max(density, Tape_trackingBand(uv) * 0.6);
+        density = max(density, Tape_tracking(uv) * 0.6);
 
         // Rows where the frame offset wrapped show the next/previous track's
         // stub, read from the side. Treat the whole band as one dead read.
         float frameY = uv.y + Tape_frameOffset();
         density = max(density, step(1.0, frameY) + step(frameY, 0.0));
 
-        float hole = Tape_holes(uv);
-        fragColor.x = step(1.0 - clamp(density, 0.0, 1.0), hole);
+        uint impulseState = Common_newRngStateEx(fragCoord, 91U);
+        float impulse = Common_randomFloat(impulseState);
+        fragColor.x = step(1.0 - clamp(density, 0.0, 1.0), impulse);
 
         uint rngI = Common_newRngState(cell + vec2(17.0, 0.0));
         uint rngQ = Common_newRngState(cell + vec2(43.0, 0.0));
@@ -970,12 +1376,11 @@ local vhs_dropout = make_pass(common_glsl .. [[
         fragColor.z = 2.0 * Common_randomFloat(rngQ) - 1.0;
         fragColor.w = 1.0;
     }
-]], base_wide, base_tall, { [0] = tape_mask })
+]], base_wide / 2, base_tall, { [0] = tape_mask })
 
--- The length is a property of the hole, not of each pixel, so it comes from a
--- coarse tape coordinate. The accumulation is a horizontal smear; a real DOC
--- would hold one whole line, but the visible result here is the same kind of
--- finite run rather than a single white pixel.
+-- Each impulse gets a random run length. The accumulation is a horizontal
+-- smear to the left, so the visible result is a bright head and a decaying
+-- tail to the right; a real DOC would hold one whole line instead.
 local vhs_dropout_blur = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
@@ -983,13 +1388,12 @@ local vhs_dropout_blur = make_pass(common_glsl .. [[
         vec2 pixel = 1.0 / iResolution.xy;
         float wear = texture(iChannel1, uv).x;
 
-        float run = floor(uv.x * 16.0);
-        float lenRand = Tape_noise(vec2(run * 0.15, Tape_track(uv) / 8.0), 80U);
+        uint lenState = Common_newRngStateEx(fragCoord, 80U);
+        float lenRand = Common_randomFloat(lenState);
 
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        int steps = int(max(float(VHS_DROPOUT_MIN_STEPS),
-            VHS_DROPOUT_BLUR_STEPS * (0.2 + 0.8 * wear) * lenRand * DECK_NOISE));
+        int steps = int(max(float(VHS_DROPOUT_MIN_STEPS), VHS_DROPOUT_BLUR_STEPS * lenRand));
 
         for(int i = 0; i < steps; ++i) {
             vec2 uvmod = vec2(uv.x - pixel.x * float(i), uv.y);
@@ -1026,6 +1430,32 @@ end
 local playback_down = make_pass(vhs_downsample_src, downsample_wide, base_tall, { [0] = generation_yiq })
 local vhs_upsample = make_pass(vhs_upsample_src, base_wide, base_tall, { [0] = playback_down })
 
+-- Chroma path: VHS delays colour relative to luma, loses vertical chroma
+-- detail, and occasionally drops colour from a whole line. This pass works on
+-- decoded YIQ before the dropout/DOC layer.
+local vhs_chroma = make_pass(common_glsl .. [[
+    void mainImage(out vec4 fragColor, in vec2 fragCoord)
+    {
+        vec2 uv = fragCoord / iResolution.xy;
+        vec2 pixel = 1.0 / iResolution.xy;
+        vec4 color = texture(iChannel0, uv);
+
+        vec2 chromaUV = uv + vec2(CHROMA_DELAY_H * pixel.x, CHROMA_DELAY_V * 2.0 * pixel.y);
+        chromaUV = clamp(chromaUV, 0.5 * pixel, 1.0 - 0.5 * pixel);
+        vec2 delayed = texture(iChannel0, chromaUV).yz;
+
+        vec2 previousField = texture(iChannel0, uv + vec2(0.0, 2.0 * pixel.y)).yz;
+        vec2 chroma = mix(delayed, previousField, CHROMA_BLEND);
+
+        float row = floor(uv.y * TAPE_ROWS_PER_FIELD);
+        uint lossState = Common_newRngStateEx(vec2(0.0, row), 95U);
+        if(Common_randomFloat(lossState) < CHROMA_LOSS)
+            chroma = vec2(0.0);
+
+        fragColor = vec4(color.x, chroma, 1.0);
+    }
+]], base_wide, base_tall, { [0] = vhs_upsample })
+
 -- The baseband side of wear. Oxide loss first: the band loses fine detail,
 -- level and chroma, and gets its own chroma noise (VHS colour dies first).
 -- Then the dropout layer: the compensator holds the previous field line, but
@@ -1046,12 +1476,15 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float n1 = Common_randomFloat(rngState) - 0.5;
         float n2 = Common_randomFloat(rngState) - 0.5;
         float n3 = Common_randomFloat(rngState) - 0.5;
-        float grain = (Common_randomFloat(rngState) - 0.5) * TAPE_GRAIN * (0.15 + 0.85 * wear) * DECK_NOISE;
 
-        // Snow lives on an 8 px cell so it survives the decode lowpass and
-        // the output downsample; finer noise just averages into a grey line.
-        uint snowState = Common_newRngState(vec2(floor(uv.x * iResolution.x * 0.125), fragCoord.y));
-        float snow = Common_randomFloat(snowState);
+        vec2 grainP = uv * iResolution.xy * GRAIN_FREQUENCY;
+        float grain = (Common_fbm(grainP, DECK_SEED + uint(iFrame) + uint(Common_field(uv)), GRAIN_DETAIL, 0.5) - 0.5)
+            * TAPE_GRAIN * (0.15 + 0.85 * wear) * DECK_NOISE;
+
+        // A dropout is a lost signal, so its luma is white. The hole map and
+        // the dropout blur give it a finite run; the transient generator is
+        // for tracking snow, where the level is not always saturated.
+        float snow = 1.0;
 
         // Oxide loss: worn oxide cannot carry the high frequencies and the
         // AGC pulls the level down instead of recovering it.
@@ -1088,9 +1521,10 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float level = clamp(result.x, 0.0, 1.0);
         float bandDead = mix(1.0, 0.10 + 0.90 * level, band);
 
-        float dead = clamp(streak * TAPE_SPARKLE, 0.0, 1.0) * bandDead;
-        result.x = mix(result.x, snow, dead);
-        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak * (1.0 - 0.90 * band));
+        // Add the decaying mask to luma, like V8: one impulse makes a bright
+        // head and a tail that fades to the right.
+        result.x = min(1.0, result.x + mask * bandDead);
+        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak * (1.0 - 0.90 * band) * TAPE_SPARKLE);
 
         // A scratch takes the whole row down, so it is snow at full strength.
         result.x = mix(result.x, snow, scratch);
@@ -1098,7 +1532,7 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
 
         // Mistracking and a crease are read errors, not oxide loss: they
         // take the level and the colour out of their line/band.
-        float tracking = Tape_trackingBand(uv);
+        float tracking = Tape_tracking(uv);
         result.x = mix(result.x, snow, tracking * 0.8);
         result.yz = mix(result.yz, vec2(n2, n3) * 0.5, tracking);
         result.x *= 1.0 - 0.4 * tracking;
@@ -1114,41 +1548,51 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
 
         fragColor = vec4(result, 1.0);
     }
-]], base_wide, base_tall, { [0] = vhs_upsample, [1] = vhs_dropout_blur, [2] = tape_mask })
+]], base_wide, base_tall, { [0] = vhs_chroma, [1] = vhs_dropout_blur, [2] = tape_mask })
 
 local vhs_headswitch = make_pass(common_glsl .. [[
-    #define P0 0.003125
-    #define P1 30.00000
-    #define P2 3.000000
-    #define P3 0.062500
-    #define P4 0.500000
-
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         uint rngStateRow = Common_newRngState(vec2(0.0, fragCoord.y));
         vec2 uv = fragCoord.xy / iResolution.xy;
 
-        // The head-switch zone is a property of the deck, not of the tape.
-        // Wear only makes the switch noisier, it does not widen the zone.
-        float zone = DECK_HEADSWITCH;
-        float wearJiggle = 1.0 + 2.0 * clamp(TAPE_WEAR, 0.0, 1.0);
+        // The head-switch zone belongs to the deck. Height and offset are in
+        // lines; the old version used a fraction of the frame and had no
+        // mid-line start.
+        float height = DECK_HEADSWITCH_HEIGHT / TAPE_ROWS;
+        float offset = DECK_HEADSWITCH_OFFSET / TAPE_ROWS;
+        float visible = max(height - offset, 0.0);
 
-        if(uv.y <= zone) {
-            float amount = 1.0 / exp((zone - uv.y) * 10.0 * P1 + P2);
-            float kjig = 1.0 / exp((zone - uv.y) * P1 + P2 - 0.5);
-
-            float jiggle = P3 * kjig * Common_randomFloat(rngStateRow) * DECK_NOISE * wearJiggle;
-            vec2 uvmod = vec2(uv.x - amount + jiggle, uv.y);
+        if(uv.y <= visible && visible > 0.0) {
+            float t = (visible - uv.y) / max(visible, 1e-4);
+            float shift = DECK_HEADSWITCH_SHIFT * pow(t, DECK_HEADSWITCH_POWER);
+            float jiggle = (Common_randomFloat(rngStateRow) * 2.0 - 1.0) * DECK_HEADSWITCH_JITTER * t;
+            vec2 uvmod = vec2(uv.x - shift + jiggle, uv.y);
 
             if((uvmod.x < 0.0) || (uvmod.x > 1.0))
                 fragColor = vec4(0.0, 0.0, 0.0, 1.0);
             else fragColor = texture(iChannel0, uvmod);
 
-            fragColor.yz *= clamp(1.0 - 25.0 * kjig, 0.0, 1.0);
+            fragColor.yz *= clamp(1.0 - 0.9 * pow(t, DECK_HEADSWITCH_POWER), 0.0, 1.0);
+
+            float midlineRow = ceil(visible * TAPE_ROWS) - 1.0;
+            if(DECK_HEADSWITCH_MIDLINE > 0.5 && floor(uv.y * TAPE_ROWS) == midlineRow) {
+                float midlineJitter = (Common_randomFloat(rngStateRow) * 2.0 - 1.0) * DECK_HEADSWITCH_MIDLINE_JITTER;
+                float copyStart = clamp(DECK_HEADSWITCH_MIDLINE_POS + midlineJitter, 0.0, 1.0);
+                vec4 unshifted = texture(iChannel0, uv);
+
+                if(uv.x < copyStart)
+                    fragColor = unshifted;
+
+                float transverse = (uv.x - copyStart) * iResolution.x / 16.0;
+                if(transverse >= 0.0 && transverse < 1.0)
+                    fragColor.x += pow(1.0 - transverse, 3.0) * 0.5;
+            }
         }
         else {
-            float jiggle = P4 * Common_randomFloat(rngStateRow) / iResolution.x;
+            float jiggle = 0.5 * Common_randomFloat(rngStateRow) / iResolution.x;
             vec2 uvmod = vec2(uv.x + jiggle, uv.y);
+
             if((uvmod.x < 0.0) || (uvmod.x > 1.0))
                 fragColor = vec4(0.0, 0.0, 0.0, 1.0);
             else fragColor = texture(iChannel0, uvmod);
@@ -1176,23 +1620,35 @@ local vhs_flagging = make_pass(common_glsl .. [[
     }
 ]], base_wide, base_tall, { [0] = vhs_headswitch })
 
--- Tracking: a mistracked head reads a scrolling band of noise. The band is
--- already used as dropout density; this pass adds the horizontal jitter and
--- the colour loss that go with it.
+-- Tracking: the bottom band and the old scrolling band share one mask. This
+-- pass adds horizontal wave, colour loss, transient snow and fine noise.
 local vhs_tracking = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
     {
         vec2 uv = fragCoord / iResolution.xy;
-        float band = Tape_trackingBand(uv);
+        float band = Tape_tracking(uv);
+
+        if(band <= 0.0) {
+            fragColor = texture(iChannel0, uv);
+            return;
+        }
 
         uint rngState = Common_newRngState(vec2(0.0, fragCoord.y));
-        float jitter = (Common_randomFloat(rngState) * 2.0 - 1.0) * 0.004 * band;
-        vec4 color = texture(iChannel0, uv + vec2(jitter, 0.0));
+        float wave = (Deck_noise(vec2(uv.y * 30.0, float(iFrame) / 24.0), 92U) * 2.0 - 1.0)
+            * DECK_TRACKING_WAVE / iResolution.x;
+        vec4 color = texture(iChannel0, uv + vec2(wave * band, 0.0));
 
         color.yz *= 1.0 - 0.85 * band;
         float ci = Common_randomFloat(rngState);
         float cq = Common_randomFloat(rngState);
         color.yz += vec2(ci, cq) * 0.08 * band;
+
+        float snow = Snow_transient(uv, 91U, DECK_TRACKING_SNOW, DECK_TRACKING_ANISOTROPY);
+        color.x += snow * band * (0.2 + 0.8 * clamp(color.x, 0.0, 1.0));
+        color.yz += vec2(snow, -snow) * 0.25 * band;
+
+        float fineNoise = Common_noise(uv * iResolution.xy * 0.05, 93U, DECK_SEED + uint(iFrame)) - 0.5;
+        color.x += fineNoise * DECK_TRACKING_NOISE * band;
 
         fragColor = color;
     }
