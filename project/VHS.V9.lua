@@ -50,7 +50,6 @@
 --   -tape-dropout X           dropout density
 --   -tape-grain X             tape grain level
 --   -tape-scratch X           longitudinal scratch depth
---   -tape-crease X            diagonal crease depth
 --   -tape-chroma-phase X      per-line chroma phase error
 --   -tape-wobble X            tape scrape / lateral wobble
 --   -tape-band N              wear patch height in field lines
@@ -187,37 +186,37 @@ local tape_speeds = {
 -- wins over it, and a stage without a preset keeps its seed-derived defaults.
 local tape_presets = {
     ["new"] = {
-        wear = 0.02, dropout = 0.0005, grain = 0.010, scratch = 0.0, crease = 0.0,
+        wear = 0.02, dropout = 0.0005, grain = 0.010, scratch = 0.0,
         chroma_phase = 0.01, wobble = 0.002,
         band = 64.0, life = 128.0, breath = 0.01,
         rf_loss = 0.0,
     },
     ["used"] = {
-        wear = 0.30, dropout = 0.004, grain = 0.030, scratch = 0.05, crease = 0.0,
+        wear = 0.30, dropout = 0.004, grain = 0.030, scratch = 0.05,
         chroma_phase = 0.03, wobble = 0.008,
         band = 48.0, life = 96.0, breath = 0.03,
         rf_loss = 0.0,
     },
     ["old"] = {
-        wear = 0.65, dropout = 0.012, grain = 0.050, scratch = 0.25, crease = 0.15,
+        wear = 0.65, dropout = 0.012, grain = 0.050, scratch = 0.25,
         chroma_phase = 0.06, wobble = 0.015,
         band = 32.0, life = 64.0, breath = 0.05,
         rf_loss = 0.0,
     },
     ["veryold"] = {
-        wear = 1.00, dropout = 0.025, grain = 0.070, scratch = 0.50, crease = 0.40,
+        wear = 1.00, dropout = 0.025, grain = 0.070, scratch = 0.50,
         chroma_phase = 0.10, wobble = 0.025,
         band = 24.0, life = 48.0, breath = 0.08,
         rf_loss = 0.10, rf_rows = 72.0,
     },
     ["damaged"] = {
-        wear = 1.10, dropout = 0.030, grain = 0.065, scratch = 0.90, crease = 0.90,
+        wear = 1.10, dropout = 0.030, grain = 0.065, scratch = 0.90,
         chroma_phase = 0.12, wobble = 0.040,
         band = 28.0, life = 64.0, breath = 0.08,
         rf_loss = 0.20, rf_rows = 96.0,
     },
     ["wrecked"] = {
-        wear = 1.30, dropout = 0.040, grain = 0.080, scratch = 1.00, crease = 1.00,
+        wear = 1.30, dropout = 0.040, grain = 0.080, scratch = 1.00,
         chroma_phase = 0.20, wobble = 0.060,
         band = 20.0, life = 40.0, breath = 0.12,
         rf_loss = 1.0, rf_rows = 120.0,
@@ -330,7 +329,6 @@ local tape_wear = option("tape-wear", preset_value("wear", 0.05 + 0.03 * (tape_s
 local tape_dropout = option("tape-dropout", preset_value("dropout", 0.001 + 0.0005 * (tape_seed % 5) / 4.0), 0.0, 1.0)
 local tape_grain = option("tape-grain", preset_value("grain", 0.018 + 0.006 * (tape_seed % 5) / 4.0), 0.0, 0.3)
 local tape_scratch = option("tape-scratch", preset_value("scratch", 0.0), 0.0, 1.0)
-local tape_crease = option("tape-crease", preset_value("crease", 0.0), 0.0, 1.0)
 local tape_chroma_phase = option("tape-chroma-phase", preset_value("chroma_phase", 0.02 + 0.01 * (tape_seed % 5) / 4.0), 0.0, 1.0)
 local tape_wobble = option("tape-wobble", preset_value("wobble", 0.005 + 0.003 * (tape_seed % 5) / 4.0), 0.0, 0.1)
 
@@ -441,7 +439,7 @@ local deck_roll_skew = option("deck-roll-skew", preset_value("roll_skew", 0.06),
 -- high is a nearly white raster with coloured dashes.
 local deck_dead_density = option("deck-dead-density", preset_value("dead_density", 0.005), 0.0, 1.0)
 
--- Peak level of baseband snow (dropout head, scratch, tracking, crease).
+-- Peak level of baseband snow (dropout head, scratch, tracking).
 -- A hole is lost signal, but a bar at full white reads as a blown highlight
 -- rather than noise, so the level stays below the clip point.
 local deck_snow_level = option("deck-snow-level", 0.55, 0.0, 1.0)
@@ -504,10 +502,10 @@ local color_corrections = {
 local color_correction = color_corrections[1]
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f rf_rows=%.1f killer=%.2f sync=%.2f hsync=%.2f roll=%.5f skew=%.3f dead=%.2f",
+    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f rf_rows=%.1f killer=%.2f sync=%.2f hsync=%.2f roll=%.5f skew=%.3f dead=%.2f",
     tape_preset_name or "default", tape_seed, deck_preset_name or "default", deck_seed, generations, signal_speed_name, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
     tape_position, tape_length, deck_tracking, deck_tracking_height, deck_tracking_scroll, deck_headswitch_height, deck_headswitch_offset,
-    deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, deck_flag, chroma_delay_h,
+    deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, deck_flag, chroma_delay_h,
     chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, tape_rf_rows, deck_killer, deck_sync_loss, deck_hsync, deck_roll_speed,
     deck_roll_skew, deck_dead_density))
 
@@ -529,7 +527,6 @@ local defines = table.concat({
     define("DECK_DOC", string.format("%.6f", deck_doc)),
     define("DECK_SPARKLE", string.format("%.6f", deck_sparkle)),
     define("TAPE_SCRATCH", string.format("%.6f", tape_scratch)),
-    define("TAPE_CREASE", string.format("%.6f", tape_crease)),
     define("DECK_FLAG", string.format("%.6f", deck_flag)),
     define("TAPE_WOBBLE", string.format("%.6f", tape_wobble)),
     -- Signal loss. The thresholds are the deck's, not the tape's: a killer
@@ -591,9 +588,6 @@ local defines = table.concat({
     define("TAPE_DOC_NOISE", "0.15"),
     define("TAPE_TRACKING_WIDTH", "0.035"),
     define("TAPE_TRACKING_SCROLL", string.format("%.7f", 1.0 / 180.0)),
-    define("TAPE_CREASE_ANGLE", string.format("%.5f", 0.10 + 0.15 * tape_rand(8))),
-    define("TAPE_CREASE_POS", string.format("%.5f", 0.25 + 0.5 * tape_rand(9))),
-    define("TAPE_CREASE_SHIFT", "0.012"),
     define("DECK_HEADSWITCH_HEIGHT", string.format("%.4f", deck_headswitch_height)),
     define("DECK_HEADSWITCH_OFFSET", string.format("%.4f", deck_headswitch_offset)),
     define("DECK_HEADSWITCH_SHIFT", string.format("%.6f", deck_headswitch_shift)),
@@ -911,18 +905,9 @@ local common_glsl <const> = defines .. [[
         return floor(phase * TAPE_ROWS / TAPE_ROLL_STEP + 0.5) * TAPE_ROLL_STEP / TAPE_ROWS;
     }
 
-    // A crease is a diagonal fold: a thin line with a lateral displacement.
-    // It is static on the tape, so it is derived from the tape id only.
-    float Tape_crease(vec2 uv)
-    {
-        float d = uv.y - (TAPE_CREASE_POS + TAPE_CREASE_ANGLE * uv.x);
-        float line = smoothstep(0.0035, 0.0, abs(d));
-        return line * clamp(TAPE_CREASE, 0.0, 1.0);
-    }
-
     // Time-base error: deck wow/flutter (periodic) plus tape scrape (noise),
-    // plus a crease step, all reduced by the deck's TBC. Stored as a fraction
-    // of the frame width in the mask and applied to the input sampling.
+    // all reduced by the deck's TBC. Stored as a fraction of the frame width
+    // in the mask and applied to the input sampling.
     float Tape_shift(vec2 uv, float wear, float rf)
     {
         float along = Tape_along(uv);
@@ -932,7 +917,6 @@ local common_glsl <const> = defines .. [[
         float wow = sin(t * 6.2831853 * 0.73 + DECK_WOW_PHASE * 6.2831853) * DECK_WOW;
         float flutter = sin(t * 6.2831853 * 6.1 + DECK_FLUTTER_PHASE * 6.2831853 + along * 47.0) * DECK_FLUTTER;
         float scrape = (2.0 * Tape_noisePeriodic(vec2(along * 120.0, track / 6.0), 30U, TAPE_SCRAPE_PERIOD) - 1.0) * TAPE_WOBBLE * wear;
-        float crease = Tape_crease(uv) * TAPE_CREASE_SHIFT;
 
         // The horizontal loop is separate from the vertical servo. Without a
         // line pulse it free-runs: short strips of rows slip sideways
@@ -948,7 +932,7 @@ local common_glsl <const> = defines .. [[
         float sway = 2.0 * Deck_noise(vec2(float(iFrame) / 8.0, 0.5), 79U) - 1.0;
         float tear = (strip + slip + rowJitter + 0.6 * sway) * TAPE_HSYNC_SHIFT * lost;
 
-        return (wow + flutter + scrape + crease) * (1.0 - DECK_TBC) + tear;
+        return (wow + flutter + scrape) * (1.0 - DECK_TBC) + tear;
     }
 
     // Whole-frame vertical sync offset, in frame fractions. Only a deck that
@@ -1518,7 +1502,7 @@ local vhs_upsample_src <const> = common_glsl .. [[
 ]]
 
 -- The mask is the only place the tape field is evaluated. R is wear, G is the
--- horizontal time-base error of that line (deck + tape + crease + sync tear),
+-- horizontal time-base error of that line (deck + tape + sync tear),
 -- B is the local RF and A is the RF the vertical servo sees. It is one sample
 -- per field line (480 rows, both fields) and 32 columns across, because the
 -- tape pattern varies along the track and the frame is only wide because the
@@ -1625,16 +1609,15 @@ local vhs_dropout_blur = make_pass(common_glsl .. [[
         float dead = meta.w;
 
         // One read-error field for the whole pipeline: a dropout hole, a
-        // mistracked band, a scratch, a crease or a dead carrier all mean the
-        // head is reading noise, not tape.
+        // mistracked band, a scratch or a dead carrier all mean the head is
+        // reading noise, not tape.
         float track = Tape_tracking(uv) * (1.0 - Tape_deadRf(rf)) * DECK_TRACKING_SNOW;
         float scratch = Tape_scratch(uv);
-        float crease = Tape_crease(uv);
-        float read = max(max(clamp(holes, 0.0, 1.0), track), max(scratch, max(crease, dead)));
+        float read = max(max(clamp(holes, 0.0, 1.0), track), max(scratch, dead));
 
-        // .y is the shared read-error field: dropout, tracking, scratch,
-        // crease or dead, already combined. Every consumer samples it instead
-        // of rebuilding the same expression.
+        // .y is the shared read-error field: dropout, tracking, scratch or
+        // dead, already combined. Every consumer samples it instead of
+        // rebuilding the same expression.
         fragColor = vec4(clamp(holes, 0.0, 1.0), clamp(read, 0.0, 1.0), rf, dead);
     }
 ]], base_wide, base_tall, { [0] = vhs_dropout })
@@ -1723,7 +1706,7 @@ local vhs_chroma = make_pass(common_glsl .. [[
 -- The baseband side of wear. Oxide loss first: the band loses fine detail,
 -- level and chroma. Then the DOC: the compensator holds the previous field
 -- line, and sparkle is the part of the head noise that leaks past its line
--- store. The read errors themselves (dropout, scratch, crease, tracking, dead
+-- store. The read errors themselves (dropout, scratch, tracking, dead
 -- carrier) are already in the composite; this pass only spends what is left.
 local vhs_dropout_combined = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
