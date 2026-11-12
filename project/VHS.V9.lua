@@ -556,12 +556,13 @@ local defines = table.concat({
     define("VHS_SNOW_LEVEL", string.format("%.6f", deck_snow_level)),
     -- Read-error presentation. Constants, not options: the thresholds belong
     -- next to the noise they shape.
+    define("TAPE_FRAME_BLANK", "6.0"),
     define("TAPE_READ_MUTE_LO", "0.05"),
     define("TAPE_READ_MUTE_HI", "0.35"),
     define("TAPE_CHROMA_FADE_LO", "0.45"),
     define("TAPE_CHROMA_FADE_HI", "0.85"),
-    define("TAPE_DEAD_FLOOR", "0.22"),
-    define("TAPE_DEAD_GAIN", "0.78"),
+    define("TAPE_DEAD_FLOOR", "0.35"),
+    define("TAPE_DEAD_GAIN", "0.65"),
     define("TAPE_TRACKING_CHROMA_LO", "0.15"),
     define("TAPE_TRACKING_CHROMA_HI", "0.65"),
     define("TAPE_KILLER", string.format("%.6f", deck_killer)),
@@ -865,12 +866,15 @@ local common_glsl <const> = defines .. [[
         return clamp(1.0 - 0.35 * wear - TAPE_RF_LOSS * smoothstep(0.55, 0.85, patch), 0.0, 1.0);
     }
 
-    // 1 while the servo has no lock. A deck with a good frame lock hides most
-    // of this, which is why the same tape rolls on one deck and not another.
+    // 1 while the servo has no lock. Two independent things can unlock it: a
+    // weak carrier (no sync pulses to lock to) and the deck's own servo, which
+    // can slip even with a perfect tape.
     float Tape_unlocked(float rf)
     {
-        float raw = 1.0 - smoothstep(TAPE_LOCK_LO, TAPE_LOCK_HI, rf);
-        return clamp(raw * (1.0 - 0.65 * DECK_FRAMELOCK), 0.0, 1.0) * TAPE_SYNC_LOSS;
+        float rfTerm = (1.0 - smoothstep(TAPE_LOCK_LO, TAPE_LOCK_HI, rf)) * (1.0 - 0.65 * DECK_FRAMELOCK);
+        float deckTerm = 1.0 - smoothstep(0.80, 0.99, DECK_FRAMELOCK);
+
+        return clamp(max(rfTerm, deckTerm), 0.0, 1.0) * TAPE_SYNC_LOSS;
     }
 
     // 0 = the line pulse is still found, 1 = the line oscillator is free-run.
@@ -1568,10 +1572,13 @@ local vhs_dropout = make_pass(common_glsl .. [[
         // the hole map would saturate the mask and turn the band into a flat
         // white bar.
 
-        // Rows where the frame offset wrapped show the next/previous track's
-        // stub, read from the side. Treat the whole band as one dead read.
+        // Only the vertical blanking interval is a dead read. The rest of the
+        // wrapped region is the current frame's opposite edge, not noise: the
+        // offset moves the picture, it does not erase it.
         float frameY = uv.y + Tape_frameOffset(servo);
-        density = max(density, step(1.0, frameY) + step(frameY, 0.0));
+        float edge = min(fract(frameY), 1.0 - fract(frameY));
+        float vbi = 1.0 - smoothstep(0.0, TAPE_FRAME_BLANK / TAPE_ROWS, edge);
+        density = max(density, vbi);
 
         // The dead frame keeps only the dead density: it is one flat field of
         // the same impulses, so the snow has the statistics of a dropout and
@@ -1757,7 +1764,8 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec3 held = prev.xyz + vec3(n1) * TAPE_DOC_NOISE;
 
         float mask = clamp(dropout.x, 0.0, 1.0);
-        float dead = texture(iChannel1, uv).w;
+        float read = clamp(dropout.y, 0.0, 1.0);
+        float dead = dropout.w;
 
         // A dead carrier gives the DOC nothing to hold. On a working deck the
         // compensator hides the hole; sparkle is the part of the head noise
@@ -1765,10 +1773,10 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float doc = DECK_DOC * (1.0 - dead) * (1.0 - 0.5 * DECK_SPARKLE);
         vec3 result = mix(base, held, mask * doc);
 
-        // The decoded noise is zero-mean; on a CRT a read error reads as a
-        // bright burst, so the hole also gets a luma floor. This is luma only:
-        // the colour comes from the decoder, not from a second generator.
-        result.x = min(1.0, result.x + mask * (1.0 - dead) * VHS_SNOW_LEVEL);
+        // The decoded noise is zero-mean; on a CRT any read error reads as a
+        // bright burst, so it also gets a luma floor. This is luma only: the
+        // colour comes from the decoder, not from a second generator.
+        result.x = min(1.0, result.x + read * (1.0 - 0.7 * dead) * VHS_SNOW_LEVEL);
 
         // Contact breathing: a slow global level wobble that also lifts the
         // grain while the head is pressed harder against the tape.
@@ -1779,10 +1787,13 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // black screen.
         result.x = mix(result.x, TAPE_DEAD_FLOOR + TAPE_DEAD_GAIN * result.x, dead);
 
-        // The wrapped rows are the vertical blanking interval: no picture and
-        // no carrier. They read dark, not as a white bar.
+        // The rows around the frame boundary are the vertical blanking
+        // interval: no picture and no carrier. A real VBI is several lines
+        // wide, so a rolled frame does not expose the raw first/last active
+        // line as a bright colour strip.
         float frameY = uv.y + Tape_frameOffset(servo);
-        float blank = step(1.0, frameY) + step(frameY, 0.0);
+        float edge = min(fract(frameY), 1.0 - fract(frameY));
+        float blank = 1.0 - smoothstep(0.0, TAPE_FRAME_BLANK / TAPE_ROWS, edge);
         result = mix(result, result * 0.12, blank);
 
         fragColor = vec4(result, 1.0);
