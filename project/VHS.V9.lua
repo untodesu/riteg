@@ -416,7 +416,7 @@ local grain_detail = math.floor(option("grain-detail", 2, 1, 5))
 -- decoder restores the recorded chroma scale on every pass; the display
 -- saturation gain is applied once in final_rgb, so colour does not compound.
 -- A new tape on a working deck is a single pass.
-local generations = math.floor(option("signal-generations", 1, 1, 4))
+local generations = math.floor(option("signal-generations", 1, 1, 16))
 
 local tape_slant <const> = 2.0 / base_tall
 local tape_breath = option("tape-breath", preset_value("breath", 0.02 + 0.01 * tape_rand(13)), 0.0, 0.1)
