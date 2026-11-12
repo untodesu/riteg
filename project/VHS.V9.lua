@@ -82,7 +82,7 @@
 --   -deck-frame-step N             vertical snap, in lines
 --   -deck-flag X                   top-of-frame tearing from a weak servo
 --   -deck-doc X                    dropout compensator strength
---   -deck-sparkle X                chroma noise in dropouts
+--   -deck-sparkle X                head noise leaking past the DOC
 --   -deck-killer X                 how hard the colour killer mutes chroma
 --   -deck-sync-loss X              how readily the servo loses lock
 --   -deck-hsync X                  horizontal sync loss multiplier (0..1)
@@ -1470,6 +1470,20 @@ local function ntsc_encode_src(gen, tape_gain)
             float noise = snowNoise + saltPepperNoise + sineNoise + rowNoise + rowSaltPepper;
             encoded += noise * NOISE_STRENGTH * (1.0 + %f * wear) * DECK_NOISE;
 
+            // Read errors. A dropout, a scratch, a crease or a dead carrier is
+            // the head reading noise instead of the tape. The noise belongs
+            // here, on the composite signal, so the decoder's own bandwidth and
+            // the colour killer shape it like the picture.
+            float holes = texture(iChannel2, uv).x;
+            float dead = texture(iChannel2, uv).w;
+            float scratch = Tape_scratch(uv);
+            float crease = Tape_crease(uv);
+            float read = clamp(max(max(holes, scratch), max(crease, dead)), 0.0, 1.0);
+
+            uint burstState = Common_newRngStateEx(fragCoord, 3U);
+            float burst = (Common_randomFloat(burstState) * 2.0 - 1.0) * 2.5;
+            encoded = mix(encoded, burst, read);
+
             fragColor.xyz = vec3(encoded);
             fragColor.w = 1.0;
         }
@@ -1697,7 +1711,7 @@ for generation = 1, generations do
     end
 
     local pre_band = make_pass(pre_band_src, base_wide, base_tall, { [0] = generation_input })
-    local encode = make_pass(ntsc_encode_src(generation, 8.0), 2.0 * base_wide, base_tall, { [0] = pre_band }, { format = "r16f" })
+    local encode = make_pass(ntsc_encode_src(generation, 8.0), 2.0 * base_wide, base_tall, { [0] = pre_band, [2] = vhs_dropout_blur }, { format = "r16f" })
     local decode_y = make_pass(ntsc_decode_y_src, 2.0 * base_wide, base_tall, { [0] = encode }, { format = "r16f" })
     generation_yiq = make_pass(ntsc_decode_iq_src(generation), 2.0 * base_wide, base_tall, { [0] = decode_y, [1] = tape_mask })
 end
@@ -1748,6 +1762,11 @@ local vhs_chroma = make_pass(common_glsl .. [[
         // chroma, it does not silence the head amplifier.
         chroma *= mix(0.03, 1.0, Tape_colorKiller());
 
+        // With no RF there is no burst either, so the decoder has nothing to
+        // lock its subcarrier to. Keep only a trace of colour: the dead raster
+        // is white snow with rare coloured flecks, not a rainbow.
+        chroma *= mix(1.0, 0.12, Tape_deadRf());
+
         fragColor = vec4(color.x, chroma, 1.0);
     }
 ]], base_wide, base_tall, { [0] = vhs_upsample })
@@ -1770,18 +1789,10 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
 
         uint rngState = Common_newRngState(fragCoord);
         float n1 = Common_randomFloat(rngState) - 0.5;
-        float n2 = Common_randomFloat(rngState) - 0.5;
-        float n3 = Common_randomFloat(rngState) - 0.5;
 
         vec2 grainP = uv * iResolution.xy * GRAIN_FREQUENCY;
         float grain = (Common_fbm(grainP, DECK_SEED + uint(iFrame) + uint(Common_field(uv)), GRAIN_DETAIL, 0.5) - 0.5)
             * TAPE_GRAIN * (0.15 + 0.85 * wear) * DECK_NOISE;
-
-        // A dropout is a lost signal, so its luma goes to the snow level. The
-        // level is not 1 on purpose: a bar at full white reads as a blown
-        // highlight, not as noise, and the hole map already carries the shape.
-        // The per-pixel jitter keeps the band grainy instead of flat.
-        float snow = VHS_SNOW_LEVEL * (0.70 + 0.60 * n1);
 
         // Oxide loss: worn oxide cannot carry the high frequencies and the
         // AGC pulls the level down instead of recovering it.
@@ -1793,7 +1804,6 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec3 base = mix(color.xyz, soft, 0.7 * oxide);
         base.x *= 1.0 - 0.12 * oxide;
         base.yz *= 1.0 - 0.50 * oxide;
-        base.yz += vec2(n2, n3) * 0.15 * oxide;
 
         // Weak RF loses the horizontal detail first: the head amplifier has no
         // carrier to demodulate, so what is left of the picture is an average
@@ -1823,43 +1833,23 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // rows, so the previous line is +2 rows, not -1.
         vec4 prev = texture(iChannel0, uv + vec2(0.0, 2.0 * pixel.y));
 
-        // The substituted line is noisy too, otherwise the hold looks clean.
-        vec3 held = prev.xyz + vec3(n1, n2, n3) * TAPE_DOC_NOISE;
+        // The substituted line is noisy too, but only in luma: the DOC holds a
+        // decoded line, so its chroma is already band-limited.
+        vec3 held = prev.xyz + vec3(n1) * TAPE_DOC_NOISE;
 
         float mask = clamp(dropout.x, 0.0, 1.0);
-        vec3 result = mix(base, held, mask * DECK_DOC);
+        float dead = texture(iChannel1, uv).w;
 
-        // A dropout is a loss of signal, so it reads as coloured snow, not
-        // as one flat white bar: luma and chroma are both noise here.
-        float scratch = Tape_scratch(uv);
-        float streak = mask * (1.0 - scratch);
+        // A dead carrier gives the DOC nothing to hold. On a working deck the
+        // compensator hides the hole; sparkle is the part of the head noise
+        // that leaks past its line store.
+        float doc = DECK_DOC * (1.0 - dead) * (1.0 - 0.5 * DECK_SPARKLE);
+        vec3 result = mix(base, held, mask * doc);
 
-        // The wrapped band is a dead read, but its noise should follow the
-        // signal level: on black it stays dark instead of flashing white.
-        float frameY = uv.y + Tape_frameOffset();
-        float band = step(1.0, frameY) + step(frameY, 0.0);
-        float level = clamp(result.x, 0.0, 1.0);
-        float bandDead = mix(1.0, 0.10 + 0.90 * level, band);
-
-        // Add the decaying mask to luma, like V8: one impulse makes a bright
-        // head and a tail that fades to the right.
-        result.x = min(1.0, result.x + mask * bandDead * VHS_SNOW_LEVEL);
-        result.yz = mix(result.yz, vec2(n2, n3) * 1.2, streak * (1.0 - 0.90 * band) * DECK_SPARKLE);
-
-        // A scratch takes the whole row down, so it is snow at full strength.
-        result.x = mix(result.x, snow, scratch);
-        result.yz = mix(result.yz, vec2(n2, n3) * 0.12, scratch);
-
-        // Mistracking and a crease are read errors, not oxide loss: they
-        // take the level and the colour out of their line/band.
-        float tracking = Tape_tracking(uv);
-        result.x = mix(result.x, snow, tracking * 0.8);
-        result.yz = mix(result.yz, vec2(n2, n3) * 0.5, tracking);
-        result.x *= 1.0 - 0.4 * tracking;
-
-        float crease = Tape_crease(uv);
-        result.x = mix(result.x, snow, crease * 0.5);
-        result.x *= 1.0 - 0.3 * crease;
+        // The decoded noise is zero-mean; on a CRT a read error reads as a
+        // bright burst, so the hole also gets a luma floor. This is luma only:
+        // the colour comes from the decoder, not from a second generator.
+        result.x = min(1.0, result.x + mask * (1.0 - dead) * VHS_SNOW_LEVEL);
 
         // The carrier is gone, so the rest of the line is runs of head noise.
         // A streak is white, not coloured: the killer has already taken the
@@ -1875,25 +1865,11 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         float breath = Tape_breath() * TAPE_BREATH;
         result.x = result.x * (1.0 + breath) + grain * (1.0 + 2.0 * breath);
 
-        // No RF at all: the raster is the dropout signal itself, streaked by
-        // the same 64-step blur as any other hole, with the picture gone. The
-        // streak shape is the mask, the colour is the same cell noise the DOC
-        // uses, so the snow has the statistics of a dropout and not of a
-        // second generator.
-        float dead = texture(iChannel1, uv).w;
-        vec3 lost = vec3(0.05 + 0.95 * mask,
-                         0.22 * dropout.y * mask,
-                         0.22 * dropout.z * mask);
+        // No RF: the AGC opens up and the raster is the noise floor, not a
+        // black screen.
+        result.x = mix(result.x, 0.22 + 0.78 * result.x, dead);
 
-        // A dead raster is the same wide-open head noise as a weak signal: a
-        // few long runs per field line, not a per-pixel hash. Without this the
-        // dropout compensation reads as fine static even at zero carrier.
-        if(dead > 0.0) {
-            float deadStreak = Snow_streak(uv, 88U, 0.35) * DECK_SMEAR;
-            lost.x = max(lost.x, deadStreak * VHS_SNOW_LEVEL * 0.9);
-        }
-
-        fragColor = vec4(mix(result, lost, dead), 1.0);
+        fragColor = vec4(result, 1.0);
     }
 ]], base_wide, base_tall, { [0] = vhs_chroma, [1] = vhs_dropout_blur, [2] = tape_mask })
 
@@ -1984,19 +1960,17 @@ local vhs_tracking = make_pass(common_glsl .. [[
             return;
         }
 
-        uint rngState = Common_newRngState(vec2(0.0, fragCoord.y));
         float wave = (Deck_noise(vec2(uv.y * 30.0, float(iFrame) / 24.0), 92U) * 2.0 - 1.0)
             * DECK_TRACKING_WAVE / iResolution.x;
         vec4 color = texture(iChannel0, uv + vec2(wave * band, 0.0));
 
+        // The read error of the band is generated in the encoder; what is
+        // left here is luma texture only. Chroma noise added after the
+        // decoder is not band-limited and is what made the band purple.
         color.yz *= 1.0 - 0.85 * band;
-        float ci = Common_randomFloat(rngState);
-        float cq = Common_randomFloat(rngState);
-        color.yz += vec2(ci, cq) * 0.08 * band;
 
         float snow = Snow_transient(uv, 91U, DECK_TRACKING_SNOW, DECK_TRACKING_ANISOTROPY);
         color.x += snow * band * (0.2 + 0.8 * clamp(color.x, 0.0, 1.0));
-        color.yz += vec2(snow, -snow) * 0.25 * band;
 
         float fineNoise = Common_noise(uv * iResolution.xy * 0.05, 93U, DECK_SEED + uint(iFrame)) - 0.5;
         color.x += fineNoise * DECK_TRACKING_NOISE * band;
