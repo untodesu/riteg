@@ -114,11 +114,13 @@
 -- ATTRIBUTION ATTRIBUTION ATTRIBUTION ATTRIBUTION
 --  VHS Compression: https://www.shadertoy.com/view/tsfXWj
 --  NTSC Filter: https://www.shadertoy.com/view/wlScWG
+--  NTSC-RS: https://github.com/ntsc-rs/ntsc-rs
 
 riteg.log_warning("VHS.V9 filter by untodesu")
 riteg.log_warning("Based on mostly own work from 2022 with the following bits:")
 riteg.log_warning("- VHS compression: https://www.shadertoy.com/view/tsfXWj by mpalko")
 riteg.log_warning("- NTSC filter: https://www.shadertoy.com/view/wlScWG by Hatchling")
+riteg.log_warning("- NTSC-RS: https://github.com/ntsc-rs/ntsc-rs")
 
 -- Specify base resolution at which the filter
 -- actually operates. This has nothing to do with
