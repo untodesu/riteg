@@ -83,6 +83,8 @@ local tape_dropout = option("dropout", 0.02, 0.0, 0.2)
 local tape_grain = option("grain", 0.04, 0.0, 0.3)
 local tape_tracking = option("tracking", 0.02, 0.0, 0.2)
 local tape_wobble = option("wobble", 0.02, 0.0, 0.1)
+local tape_breath = option("breath", 0.06, 0.0, 0.1)
+local tape_headswitch = option("headswitch", 0.02, 0.0, 0.1)
 local tape_doc = option("doc", 1.0, 0.0, 1.0)
 local tape_sparkle = option("sparkle", 0.8, 0.0, 1.0)
 local tape_scratch = option("scratch", 0.0, 0.0, 1.0)
@@ -98,8 +100,8 @@ local tape_track_correlation <const> = 4.0
 local tape_slant <const> = 2.0 / base_tall
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%d deck=%d wear=%.3f dropout=%.4f grain=%.4f tracking=%.4f slant=%.5f wobble=%.5f doc=%.3f sparkle=%.3f scratch=%.3f",
-    tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_doc, tape_sparkle, tape_scratch))
+    "VHS hop: tape=%d deck=%d wear=%.3f dropout=%.4f grain=%.4f tracking=%.4f slant=%.5f wobble=%.5f breath=%.4f headswitch=%.4f doc=%.3f sparkle=%.3f scratch=%.3f",
+    tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_doc, tape_sparkle, tape_scratch))
 
 -- A bunch of GLSL code that is shared between all the
 -- passes in the filter pipeline; this contains bits from
@@ -124,6 +126,12 @@ local common_glsl <const> = string.format([[
     // Time-base error: how far a bad patch can displace a line start,
     // as a fraction of the frame width.
     const float TAPE_WOBBLE = %.5f;
+
+    // Slow head-to-tape contact breathing: global luma/grain modulation.
+    const float TAPE_BREATH = %.4f;
+
+    // How far wear extends the head-switch zone at the frame edge.
+    const float TAPE_HEADSWITCH = %.4f;
 
     // How much of a dropout the compensator replaces with the previous line
     // before the independent white sparkle is added on top.
@@ -282,6 +290,14 @@ local common_glsl <const> = string.format([[
     float Tape_drift()
     {
         float n = Tape_noise(vec2(float(iFrame) / (TAPE_TRACK_CORRELATION * 32.0), 0.5), 40U);
+        return 2.0 * n - 1.0;
+    }
+
+    // Head-to-tape contact breathes over seconds: the whole frame slowly
+    // gains and loses level. One slow noise, so it is global and smooth.
+    float Tape_breath()
+    {
+        float n = Tape_noise(vec2(float(iFrame) / 72.0, 0.5), 60U);
         return 2.0 * n - 1.0;
     }
 
@@ -479,7 +495,7 @@ local common_glsl <const> = string.format([[
 
         return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
     }
-]], tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_doc, tape_sparkle, tape_scratch, tape_track_correlation)
+]], tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_doc, tape_sparkle, tape_scratch, tape_track_correlation)
 
 local function lowerpass_shader(dx, dy)
     return common_glsl .. string.format([[
@@ -835,7 +851,11 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // A scratch takes the whole row down, so it is snow at full strength.
         result.x = mix(result.x, snow, scratch);
         result.yz = mix(result.yz, vec2(n2, n3) * 0.12, scratch);
-        result.x += grain;
+
+        // Contact breathing: a slow global level wobble that also lifts the
+        // grain while the head is pressed harder against the tape.
+        float breath = Tape_breath() * TAPE_BREATH;
+        result.x = result.x * (1.0 + breath) + grain * (1.0 + 2.0 * breath);
 
         fragColor = vec4(result, 1.0);
     }
@@ -853,9 +873,13 @@ local vhs_headswitch = make_pass(common_glsl .. [[
         uint rngStateRow = Common_newRngState(vec2(0.0, fragCoord.y));
         vec2 uv = fragCoord.xy / iResolution.xy;
 
-        if(uv.y <= P0) {
-            float amount = 1.0 / exp((P0 - uv.y) * 10.0 * P1 + P2);
-            float kjig = 1.0 / exp((P0 - uv.y) * P1 + P2 - 0.5);
+        // A worn tape loses head-switch lock more easily, so the band of
+        // shifted, desaturated lines at the frame edge grows with wear.
+        float zone = P0 + TAPE_HEADSWITCH * clamp(TAPE_WEAR, 0.0, 1.0);
+
+        if(uv.y <= zone) {
+            float amount = 1.0 / exp((zone - uv.y) * 10.0 * P1 + P2);
+            float kjig = 1.0 / exp((zone - uv.y) * P1 + P2 - 0.5);
 
             float jiggle = P3 * kjig * Common_randomFloat(rngStateRow);
             vec2 uvmod = vec2(uv.x - amount + jiggle, uv.y);
