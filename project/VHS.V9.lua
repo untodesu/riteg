@@ -85,6 +85,7 @@ local tape_tracking = option("tracking", 0.02, 0.0, 0.2)
 local tape_wobble = option("wobble", 0.02, 0.0, 0.1)
 local tape_breath = option("breath", 0.06, 0.0, 0.1)
 local tape_headswitch = option("headswitch", 0.02, 0.0, 0.1)
+local tape_chroma_phase = option("chroma-phase", 0.0625, 0.0, 1.0)
 local tape_doc = option("doc", 1.0, 0.0, 1.0)
 local tape_sparkle = option("sparkle", 0.8, 0.0, 1.0)
 local tape_scratch = option("scratch", 0.0, 0.0, 1.0)
@@ -100,8 +101,8 @@ local tape_track_correlation <const> = 4.0
 local tape_slant <const> = 2.0 / base_tall
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%d deck=%d wear=%.3f dropout=%.4f grain=%.4f tracking=%.4f slant=%.5f wobble=%.5f breath=%.4f headswitch=%.4f doc=%.3f sparkle=%.3f scratch=%.3f",
-    tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_doc, tape_sparkle, tape_scratch))
+    "VHS hop: tape=%d deck=%d wear=%.3f dropout=%.4f grain=%.4f tracking=%.4f slant=%.5f wobble=%.5f breath=%.4f headswitch=%.4f chroma=%.4f doc=%.3f sparkle=%.3f scratch=%.3f",
+    tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_chroma_phase, tape_doc, tape_sparkle, tape_scratch))
 
 -- A bunch of GLSL code that is shared between all the
 -- passes in the filter pipeline; this contains bits from
@@ -132,6 +133,9 @@ local common_glsl <const> = string.format([[
 
     // How far wear extends the head-switch zone at the frame edge.
     const float TAPE_HEADSWITCH = %.4f;
+
+    // How much wear adds chroma phase/frequency error, in radians.
+    const float TAPE_CHROMA_PHASE = %.4f;
 
     // How much of a dropout the compensator replaces with the previous line
     // before the independent white sparkle is added on top.
@@ -414,7 +418,7 @@ local common_glsl <const> = string.format([[
         return decoded * sin(phaseAM) * 4.0;
     }
 
-    vec3 NTSC_fullDecodeYIQ(sampler2D sampler, in vec2 uv, in float pixelWidth, uint rngRow, bool alternatePhase)
+    vec3 NTSC_fullDecodeYIQ(sampler2D sampler, in vec2 uv, in float pixelWidth, uint rngRow, bool alternatePhase, float tapeWear)
     {
         uint seed = rngRow;
         vec2 originalUV = uv;
@@ -427,6 +431,13 @@ local common_glsl <const> = string.format([[
 
         float frequencyNoise = Common_randomFloat(seed) * 2.0 - 1.0;
         frequencyNoise *= rowNoiseIntensity.z * 0.5 * 3.1415927 * NOISE_STRENGTH;
+
+        // Worn tape loses chroma phase lock: each line gets a hue offset and
+        // a small frequency error, so the error drifts along the line too.
+        float wearPhase = (Common_randomFloat(seed) * 2.0 - 1.0) * TAPE_CHROMA_PHASE * tapeWear;
+        float wearFrequency = (Common_randomFloat(seed) * 2.0 - 1.0) * TAPE_CHROMA_PHASE * 0.01 * tapeWear;
+        phaseNoise += wearPhase;
+        frequencyNoise += wearFrequency;
         
         vec3 yiq = vec3(0);
         float alt = alternatePhase ? PHASE_ALTERNATION : 0.0;
@@ -495,7 +506,7 @@ local common_glsl <const> = string.format([[
 
         return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
     }
-]], tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_doc, tape_sparkle, tape_scratch, tape_track_correlation)
+]], tape_seed, deck_seed, tape_wear, tape_dropout, tape_grain, tape_tracking, tape_slant, tape_wobble, tape_breath, tape_headswitch, tape_chroma_phase, tape_doc, tape_sparkle, tape_scratch, tape_track_correlation)
 
 local function lowerpass_shader(dx, dy)
     return common_glsl .. string.format([[
@@ -591,10 +602,11 @@ local ntsc_decode_iq_src <const> = common_glsl .. [[
     {
         vec2 uv = fragCoord / iResolution.xy;
         vec2 pixelSize = 1.0 / iResolution.xy;
+        float wear = texture(iChannel1, uv).x;
         
         uint rngStateRow = Common_newRngState(vec2(0.0, fragCoord.y));
 
-        fragColor.xyz = NTSC_fullDecodeYIQ(iChannel0, uv, pixelSize.x * NTSC_SCALE, rngStateRow, int(fragCoord.y) % 2 == 0);
+        fragColor.xyz = NTSC_fullDecodeYIQ(iChannel0, uv, pixelSize.x * NTSC_SCALE, rngStateRow, int(fragCoord.y) % 2 == 0, wear);
         fragColor.w = 1.0;
     }
 ]]
@@ -625,7 +637,7 @@ local gamma_correct = make_pass(common_glsl .. [[
 
 local ntsc_pre_vcr_encode = make_pass(ntsc_encode_src(0, 8.0), 2.0 * base_wide, base_tall, { [0] = gamma_correct, [1] = tape_mask }, { format = "r16f" })
 local ntsc_pre_vcr_decode_y = make_pass(ntsc_decode_y_src, 2.0 * base_wide, base_tall, { [0] = ntsc_pre_vcr_encode }, { format = "r16f" })
-local ntsc_pre_vcr_decode_iq = make_pass(ntsc_decode_iq_src, 2.0 * base_wide, base_tall, { [0] = ntsc_pre_vcr_decode_y })
+local ntsc_pre_vcr_decode_iq = make_pass(ntsc_decode_iq_src, 2.0 * base_wide, base_tall, { [0] = ntsc_pre_vcr_decode_y, [1] = tape_mask })
 
 local vhs_cutoff = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
@@ -931,7 +943,7 @@ local vhs_tracking = make_pass(common_glsl .. [[
 local post_vcr_rgb = make_pass(yiq_to_rgb_src, base_wide, base_tall, { [0] = vhs_tracking })
 local ntsc_post_vcr_encode = make_pass(ntsc_encode_src(1, 0.0), 2.0 * base_wide, base_tall, { [0] = post_vcr_rgb }, { format = "r16f" })
 local ntsc_post_vcr_decode_y = make_pass(ntsc_decode_y_src, 2.0 * base_wide, base_tall, { [0] = ntsc_post_vcr_encode }, { format = "r16f" })
-local ntsc_post_vcr_decode_iq = make_pass(ntsc_decode_iq_src, 2.0 * base_wide, base_tall, { [0] = ntsc_post_vcr_decode_y })
+local ntsc_post_vcr_decode_iq = make_pass(ntsc_decode_iq_src, 2.0 * base_wide, base_tall, { [0] = ntsc_post_vcr_decode_y, [1] = tape_mask })
 
 local final_rgb = make_pass(common_glsl .. [[
     void mainImage(out vec4 fragColor, in vec2 fragCoord)
