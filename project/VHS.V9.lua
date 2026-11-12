@@ -85,7 +85,6 @@
 --   -deck-killer X                 how hard the colour killer mutes chroma
 --   -deck-sync-loss X              how readily the servo loses lock
 --   -deck-hsync X                  horizontal sync loss multiplier (0..1)
---   -deck-smear X                  weak-signal horizontal smear (0..1)
 --   -deck-roll-speed X             frame offsets per frame while unlocked
 --   -deck-roll-skew X              horizontal shear per roll
 --   -deck-dead-density X           raster density with no RF
@@ -395,7 +394,6 @@ local deck_flag = option("deck-flag", preset_value("flag", 0.0), 0.0, 1.0)
 -- oscillator free-runs and the picture tears sideways. Both controls are
 -- multipliers on the signal-dependent amount; 0 disables that half.
 local deck_hsync = option("deck-hsync", 1.0, 0.0, 1.0)
-local deck_smear = option("deck-smear", 1.0, 0.0, 1.0)
 
 -- Chroma path. There is no chroma preset: the delay follows the selected tape
 -- speed by default, everything else is explicit.
@@ -500,11 +498,11 @@ local color_corrections = {
 local color_correction = color_corrections[1]
 
 riteg.log_info(string.format(
-    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f rf_rows=%.1f killer=%.2f sync=%.2f hsync=%.2f smear=%.2f roll=%.5f skew=%.3f dead=%.2f",
+    "VHS hop: tape=%s(%d) deck=%s(%d) gen=%d speed=%s decode=%s wear=%.3f dropout=%.4f grain=%.4f band=%.2f life=%.2f pos=%.1f len=%d tracking=%.3f track_h=%.1f track_scroll=%.2f hs=%.1f/%.1f/%.3f wow=%.5f flutter=%.5f framelock=%.3f tbc=%.3f noise=%.3f crease=%.3f flag=%.3f chroma=%.1f/%.1f/%.2f/%.4f grain_freq=%.2f rf=%.2f rf_rows=%.1f killer=%.2f sync=%.2f hsync=%.2f roll=%.5f skew=%.3f dead=%.2f",
     tape_preset_name or "default", tape_seed, deck_preset_name or "default", deck_seed, generations, signal_speed_name, decode_name, tape_wear, tape_dropout, tape_grain, tape_band, tape_life,
     tape_position, tape_length, deck_tracking, deck_tracking_height, deck_tracking_scroll, deck_headswitch_height, deck_headswitch_offset,
     deck_headswitch_shift, deck_wow, deck_flutter, deck_framelock, deck_tbc, deck_noise, tape_crease, deck_flag, chroma_delay_h,
-    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, tape_rf_rows, deck_killer, deck_sync_loss, deck_hsync, deck_smear, deck_roll_speed,
+    chroma_delay_v, chroma_blend, chroma_loss, grain_frequency, tape_rf_loss, tape_rf_rows, deck_killer, deck_sync_loss, deck_hsync, deck_roll_speed,
     deck_roll_skew, deck_dead_density))
 
 -- Define helpers keep the big shader string free of a 40-argument format call.
@@ -546,7 +544,6 @@ local defines = table.concat({
     define("TAPE_HSYNC_STRIP", "12.0"),
     define("TAPE_HSYNC_SHIFT", "0.025"),
     define("DECK_HSYNC", string.format("%.6f", deck_hsync)),
-    define("DECK_SMEAR", string.format("%.6f", deck_smear)),
     define("TAPE_KILLER_LO", "0.45"),
     define("TAPE_KILLER_HI", "0.52"),
     define("TAPE_DEAD_LO", "0.05"),
@@ -1726,7 +1723,7 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec4 dropout = texture(iChannel1, uv);
         vec4 tape = texture(iChannel2, uv);
         float wear = tape.x;
-        float rf = tape.z;
+        float servo = tape.a;
 
         uint rngState = Common_newRngState(fragCoord);
         float n1 = Common_randomFloat(rngState) - 0.5;
@@ -1745,29 +1742,6 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         vec3 base = mix(color.xyz, soft, 0.7 * oxide);
         base.x *= 1.0 - 0.12 * oxide;
         base.yz *= 1.0 - 0.50 * oxide;
-
-        // Weak RF loses the horizontal detail first: the head amplifier has no
-        // carrier to demodulate, so what is left of the picture is an average
-        // along the line. The reach grows with the same signal loss that tears
-        // the rows sideways at the read stage.
-        float weak = Tape_hSyncLost(rf);
-        if(weak > 0.02) {
-            float reach = mix(1.0, 18.0, weak);
-            vec3 smear = vec3(0.0);
-            float weight = 0.0;
-
-            for(int i = -18; i <= 18; ++i) {
-                float d = abs(float(i));
-                if(d > reach)
-                    continue;
-
-                float w = 1.0 - d / (reach + 1.0);
-                smear += texture(iChannel0, uv + vec2(float(i) * pixel.x, 0.0)).xyz * w;
-                weight += w;
-            }
-
-            base = mix(base, smear / max(weight, 1e-3), weak * 0.45 * DECK_SMEAR);
-        }
 
         // What the one-field-line delay holds. The raster runs from the top
         // of the picture down (uv.y = 1 -> 0), and one field line is two frame
@@ -1800,6 +1774,12 @@ local vhs_dropout_combined = make_pass(common_glsl .. [[
         // No RF: the AGC opens up and the raster is the noise floor, not a
         // black screen.
         result.x = mix(result.x, TAPE_DEAD_FLOOR + TAPE_DEAD_GAIN * result.x, dead);
+
+        // The wrapped rows are the vertical blanking interval: no picture and
+        // no carrier. They read dark, not as a white bar.
+        float frameY = uv.y + Tape_frameOffset(servo);
+        float blank = step(1.0, frameY) + step(frameY, 0.0);
+        result = mix(result, result * 0.12, blank);
 
         fragColor = vec4(result, 1.0);
     }
